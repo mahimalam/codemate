@@ -1,31 +1,48 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-env/
-venv/
+*.egg-info/
+dist/
+build/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
 .venv/
+venv/
+env/
 ENV/
 
-# IDE Runtime & Session Data
-*.log
-.claude_code_ide/
-storage/
+# ── IDE Runtime & User Data (NEVER commit these) ──────────────────────────────
+# All user secrets, history, and session data live here
+~/.claude_code_ide/
+
+# If somehow these end up in the project directory
+provider_config.json
 ai_memory.json
 chat_history.json
 active_workspace.json
 recent_workspaces.json
-provider_config.json
+storage/
 
-# Environment secrets
+# ── Secrets & Environment ──────────────────────────────────────────────────────
 .env
 .env.local
+.env.*.local
 
-# OS Artifacts
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+nohup.out
+
+# ── OS Artifacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Graphify
+# ── Graphify Knowledge Graph Cache ────────────────────────────────────────────
 graphify-out/
+
+# ── Node (if any tooling added later) ─────────────────────────────────────────
+node_modules/
+.npm/

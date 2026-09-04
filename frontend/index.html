@@ -3706,7 +3706,7 @@
               <div class="preset-name">${escapeHtml(p.name)}</div>
               ${isCurrent ? '<span style="font-size:10px; color:#4ade80; font-weight:600; padding:1px 5px; background:rgba(74,222,128,0.12); border-radius:3px;">Current</span>' : ''}
             </div>
-            <div class="preset-path">${escapeHtml(p.path.replace("/home/vexp", "~"))}</div>
+            <div class="preset-path">${escapeHtml(p.path.replace(os.homedir ? os.homedir() : '/home', '~').replace(/\/[^\/]+/, '~'))}</div>
           </div>
         `;
         card.onclick = () => selectWorkspace(p.path);
@@ -3738,7 +3738,7 @@
         document.getElementById("topWorkspaceTitle").innerText = title;
         document.getElementById("sidebarHeaderTitle").innerText = data.has_workspace ? `EXPLORER: ${data.name.toUpperCase()}` : "NO FOLDER OPENED";
         document.getElementById("bcProjectName").innerText = title;
-        document.getElementById("termPromptBadge").innerText = data.has_workspace ? `${data.name} $` : "vexp $";
+        document.getElementById("termPromptBadge").innerText = data.has_workspace ? `${data.name} $` : "user $";
 
         // Populate "Open Recent" Submenu in File Menu (VSCode / Cursor style)
         const submenu = document.getElementById("submenuRecentWorkspaces");
@@ -3753,7 +3753,7 @@
                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" style="flex-shrink:0;"><path d="M1.5 2.5a1 1 0 0 1 1-1h3.38a1 1 0 0 1 .7.3L7.8 3H13.5a1 1 0 0 1 1 1v1h-13v-2.5z" fill="#dcb67a"/><path d="M1.5 5h13a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="#dcb67a"/></svg>
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; ${isCurrent ? 'font-weight:600; color:#ffffff;' : ''}">${escapeHtml(p.name)}</span>
               </span>
-              <span style="color:var(--text-dim); font-size:10px; margin-left:12px; flex-shrink:0;">${isCurrent ? '✓' : escapeHtml(p.path.replace('/home/vexp', '~'))}</span>
+              <span style="color:var(--text-dim); font-size:10px; margin-left:12px; flex-shrink:0;">${isCurrent ? '✓' : escapeHtml(p.path.replace(/\/home\/[^\/]+/, '~'))}</span>
             `;
             row.onclick = (e) => {
               e.stopPropagation();

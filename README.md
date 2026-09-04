@@ -1,114 +1,187 @@
-# VexP Code IDE - Autonomous AI Coding Harness
+# AI Code IDE — Autonomous AI Coding Harness
 
-> A customizable, open-source AI coding harness and web IDE designed for local GPU inference (Ollama) and cloud APIs (OpenRouter, Claude, OpenAI, DeepSeek). Combines a full Monaco editor workspace with autonomous agent deliberation, in-prompt model switching, and real-time execution tools.
+> A fully open-source, self-hosted AI coding IDE you can run entirely on your own machine or server. Supports **local GPU inference** (Ollama), **cloud APIs** (OpenRouter, Anthropic, OpenAI), and **any OpenAI-compatible proxy**. Built for developers who want total control.
 
----
-
-## Highlights
-
-* **5-Layer Agentic Deliberation Loop**: Mirrored after Claude Code and Devin — automatically performs context clustering, intent planning, autonomous tool dispatch (`read_file_range`, `apply_file_diff`, `write_file`, shell commands), observation/self-correction, and final diff assembly.
-* **In-Prompt Model Selector (Gemini / Cursor Style)**: Directly embedded in the chat input toolbar. Switch effortlessly between local GPU models and cloud models with an upward-floating popover.
-* **Multi-Provider Architecture**:
-  * **Ollama (Local)**: 100% private, offline, GPU-accelerated. Includes background VRAM preloading so model transitions never freeze.
-  * **OpenRouter**: Access 100+ frontier models (Claude 3.5 Sonnet, DeepSeek V3/R1, Llama 3.3 70B, GPT-4o) with a single API key.
-  * **Anthropic Claude (Direct)**: Native message API with dynamic tool schema translation.
-  * **OpenAI & Compatible**: Configurable custom Base URL (supports DeepSeek API, Groq, Together AI, and local vLLM).
-* **VS Code-Grade Desktop Feel**: Monaco editor with syntax highlighting, code folding, resizable draggable splitters, tabbed editing, and inline terminal.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-green)](https://fastapi.tiangolo.com)
 
 ---
 
-## Architecture Overview
+## ✨ Highlights
 
-```mermaid
-flowchart TD
-    User([User Prompt]) --> L1[Layer 1: Context Clustering & Sensor Fusion]
-    L1 --> L2[Layer 2: Intent Classification & Agentic Deliberation]
-    
-    subgraph AgenticLoop ["Autonomous Agent Loop (Max 5 Steps)"]
-        L2 --> L3[Layer 3: Autonomous Tool Dispatch & Sandboxing]
-        L3 --> Exec[Execute in Workspace / Terminal / Monaco File Buffer]
-        Exec --> L4[Layer 4: Environmental Observation & Self-Correction]
-        L4 -- If Error or Next Step Needed --> L2
-    end
+| Feature | Description |
+|---|---|
+| **5-Layer Agentic Loop** | Mirrors Claude Code & Devin — context clustering → intent planning → autonomous tool dispatch → self-correction → diff assembly |
+| **Multi-Provider AI** | Ollama (local GPU), OpenRouter (100+ models), Anthropic, OpenAI, or **any custom OpenAI-compatible proxy** |
+| **Monaco Editor** | VS Code-grade editor with syntax highlighting, code folding, tabbed editing |
+| **Integrated Terminal** | Real shell execution from the browser |
+| **Source Control** | Full Git commit / push / pull UI with GitHub PAT integration |
+| **AI Memory** | Persistent per-user memory the agent reads on every request |
+| **Fully Customizable** | Change name, branding, agent persona, default models — all in one config file |
 
-    L4 -- Goal Verified --> L5[Layer 5: Diff Assembly & Collapsible UI Delivery]
-    L5 --> UI([Interactive Response with Apply to Editor])
+---
+
+## 🏗 Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Browser (index.html)            │
+│  Monaco Editor │ File Tree │ Terminal │ AI Chat  │
+└───────────────────────┬─────────────────────────┘
+                        │ HTTP / SSE
+┌───────────────────────▼─────────────────────────┐
+│             FastAPI Backend (server.py)          │
+│  Provider Router │ Git API │ FS API │ Agent Loop │
+└──────┬──────────────────────────┬───────────────┘
+       │                          │
+┌──────▼──────┐          ┌────────▼────────┐
+│ Ollama      │          │ Cloud Providers  │
+│ (Local GPU) │          │ OpenRouter/OAI/  │
+└─────────────┘          │ Anthropic/Proxy  │
+                         └─────────────────┘
+```
+
+### 5-Layer Agent Loop
+```
+User Prompt
+  └▶ Layer 1: Context Clustering & File Sensor Fusion
+       └▶ Layer 2: Intent Classification & Deliberation
+            └▶ Layer 3: Tool Dispatch (read/write/diff/bash)
+                 └▶ Layer 4: Observation & Self-Correction  ──┐
+                      └▶ Layer 5: Diff Assembly & UI Render   │
+                                                    (loop ◀───┘)
 ```
 
 ---
 
-## File Structure
+## 🚀 Quickstart
+
+### 1. Clone
+```bash
+git clone https://github.com/your-username/your-repo.git
+cd your-repo
+```
+
+### 2. Install
+```bash
+bash scripts/install.sh
+```
+
+### 3. Launch
+```bash
+bash scripts/start.sh
+```
+
+Open **http://127.0.0.1:7860** in your browser.
+
+---
+
+## ⚙️ Configuration & Customization
+
+### Branding (name, agent persona, terminal prompt)
+
+Edit **`config/branding.json`** — this is the single source of truth for all user-facing names:
+
+```json
+{
+  "app": {
+    "name": "My AI IDE",
+    "tagline": "Autonomous AI Coding Harness"
+  },
+  "agent": {
+    "name": "My Agent",
+    "welcome_message": "My AI IDE Ready",
+    "input_placeholder": "Ask My Agent about your project...",
+    "terminal_prompt": "dev $"
+  },
+  "defaults": {
+    "system_prompt_intro": "You are an expert AI software engineer.",
+    "default_ai_provider": "ollama",
+    "default_ai_model": "qwen2.5:14b"
+  }
+}
+```
+
+### AI Providers (via the Settings UI)
+
+Click the **⚙ Gear** icon in the IDE → **AI Providers & Models**:
+
+| Provider | What to enter |
+|---|---|
+| **Ollama (local)** | Endpoint URL (default: `http://127.0.0.1:11434`) — no API key needed |
+| **OpenRouter** | Your `sk-or-...` API key |
+| **Anthropic** | Your `sk-ant-...` API key |
+| **OpenAI** | Your `sk-...` API key |
+| **Custom Proxy** | Any OpenAI-compatible base URL + key |
+
+All keys are stored **locally** in `~/.claude_code_ide/provider_config.json` — never committed to git.
+
+### Environment Variables (optional)
+
+Copy `.env.example` to `.env` and set overrides:
+```bash
+cp .env.example .env
+```
+
+---
+
+## 📁 File Structure
 
 ```
-claude-code-ide/
+.
 ├── backend/
-│   ├── server.py              # FastAPI server & multi-provider agent harness
-│   └── tools.py               # Workspace agent tools (read, write, diff, bash)
-├── frontend/
-│   └── index.html             # Monaco editor, responsive IDE layout, & dynamic UI
-├── scripts/
-│   ├── install.sh             # 1-click Linux/macOS setup script
-│   └── start.sh               # 1-click launcher script
+│   ├── server.py          # FastAPI server, agent loop, all API endpoints
+│   └── tools.py           # Agent workspace tools (read, write, diff, bash)
 ├── config/
-│   └── default_config.json    # Default configuration & provider templates
-├── requirements.txt           # Python dependencies
-├── .env.example               # Optional environment variables
-├── .gitignore                 # Standard repository ignores
-└── README.md                  # Documentation and quickstart guide
+│   ├── branding.json      # ← EDIT THIS to customize name, agent, defaults
+│   └── default_config.json # Default AI provider templates
+├── frontend/
+│   └── index.html         # Monaco editor, full IDE UI, SSE chat stream
+├── scripts/
+│   ├── install.sh         # One-click setup (venv, deps, Ollama check)
+│   └── start.sh           # One-click launcher
+├── requirements.txt       # Python dependencies
+├── .env.example           # Environment variable template
+└── .gitignore             # Excludes all secrets and runtime data
 ```
 
 ---
 
-## Quickstart (1-Click Setup)
+## 🔒 What Is NOT Committed to Git
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/your-username/claude-code-ide.git
-cd claude-code-ide
-```
+The following are in `.gitignore` and **never** pushed:
 
-### 2. Run the Installer
-The installer creates a Python virtual environment, installs dependencies, and verifies your local Ollama installation:
-```bash
-./scripts/install.sh
-```
-
-### 3. Launch the IDE
-```bash
-./scripts/start.sh
-```
-Open your browser at:
-```
-http://127.0.0.1:7860
-```
+- `~/.claude_code_ide/` — all your API keys, chat history, memories, workspaces
+- `.env` — any local environment secrets
+- `*.log` — server logs
+- `graphify-out/` — knowledge graph cache
 
 ---
 
-## Model & API Configuration
-
-You can configure models directly inside the web UI:
-1. Click the **Gear Icon** at the bottom of the Activity Bar, or click the model selector pill in the chat toolbar.
-2. Under **AI Providers & Models**:
-   * **Local Ollama**: Confirm endpoint (default: `http://127.0.0.1:11434`) and pull any model with 1 click.
-   * **OpenRouter / Claude / OpenAI**: Toggle the switch, enter your API key, and click **Test Connection** to measure live ping latency in milliseconds.
-3. Click **Save Settings** — newly configured models immediately appear in your in-prompt model switcher.
-
----
-
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
-| :--- | :--- |
-| `Ctrl + Enter` | Submit prompt to AI Assistant |
-| `Ctrl + Shift + E` | Open Explorer view |
-| `Ctrl + Shift + F` | Open Code Search view |
-| `Ctrl + Shift + G` | Open Source Control view |
-| `Ctrl + \`` | Toggle Integrated Terminal |
-| `Ctrl + B` | Toggle Primary Sidebar |
-| `Ctrl + ,` | Open IDE Settings & AI Providers |
+|---|---|
+| `Ctrl + Enter` | Send prompt to AI |
+| `Ctrl + Shift + E` | Explorer |
+| `Ctrl + Shift + F` | Search |
+| `Ctrl + Shift + G` | Source Control |
+| `` Ctrl + ` `` | Toggle Terminal |
+| `Ctrl + B` | Toggle Sidebar |
+| `Ctrl + ,` | Settings |
 
 ---
 
-## License
+## 🤝 Contributing
 
-MIT License. Free for personal and commercial use.
+PRs are welcome. Please:
+1. Fork and create a feature branch
+2. Keep personal data out of commits
+3. Test with at least one provider (Ollama is free and local)
+
+---
+
+## 📄 License
+
+MIT License — free for personal and commercial use. See [LICENSE](LICENSE).

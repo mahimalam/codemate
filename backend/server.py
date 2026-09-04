@@ -35,6 +35,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 INDEX_HTML_PATH = os.path.join(FRONTEND_DIR, "index.html")
 
+# ── User config directory (never committed to git) ─────────────────────────
 CONFIG_DIR = os.path.expanduser("~/.claude_code_ide")
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
@@ -45,13 +46,18 @@ WORKSPACE_CONFIG_FILE = os.path.join(CONFIG_DIR, "active_workspace.json")
 RECENT_WORKSPACES_FILE = os.path.join(CONFIG_DIR, "recent_workspaces.json")
 PROVIDER_CONFIG_FILE = os.path.join(CONFIG_DIR, "provider_config.json")
 
-# Migrate existing configuration if present
-if not os.path.exists(PROVIDER_CONFIG_FILE) and os.path.exists(os.path.expanduser("~/.vexp_provider_config.json")):
-    try:
-        import shutil
-        shutil.copyfile(os.path.expanduser("~/.vexp_provider_config.json"), PROVIDER_CONFIG_FILE)
-    except Exception:
-        pass
+# ── Branding config (config/branding.json) ─────────────────────────────────
+_BRANDING_FILE = os.path.join(PROJECT_ROOT, "config", "branding.json")
+try:
+    with open(_BRANDING_FILE, "r") as _bf:
+        BRANDING = json.load(_bf)
+except Exception:
+    BRANDING = {}
+
+APP_NAME    = BRANDING.get("app", {}).get("name", "AI Code IDE")
+AGENT_NAME  = BRANDING.get("agent", {}).get("name", "AI Agent")
+SYS_INTRO   = BRANDING.get("defaults", {}).get("system_prompt_intro", "You are an expert agentic AI software engineer.")
+TERM_PROMPT = BRANDING.get("agent", {}).get("terminal_prompt", "user $")
 
 from tools import TOOLS_SPEC, execute_agent_tool
 
@@ -161,14 +167,13 @@ def load_recent_workspaces() -> List[Dict[str, str]]:
                 return json.load(f)
         except:
             pass
-    # Seed with initial common project directories if empty
+    # Seed with sensible defaults — no personal paths
     home = os.path.expanduser("~")
     defaults = [
-        {"name": "Work", "path": os.path.join(home, "Desktop", "Work")},
-        {"name": "claude-code-ide", "path": os.path.abspath(PROJECT_ROOT)},
-        {"name": "MatchIQ MultiLeague", "path": os.path.join(home, "Desktop", "Zurich_VPS", "home", "mahimalam2400", "MatchIQ_MultiLeague")},
-        {"name": "Fifa Project", "path": os.path.join(home, "Desktop", "Zurich_VPS", "home", "mahimalam2400", "Fifa_project")},
-        {"name": "Current Workspace", "path": os.getcwd()}
+        {"name": os.path.basename(PROJECT_ROOT), "path": os.path.abspath(PROJECT_ROOT)},
+        {"name": "Home",    "path": home},
+        {"name": "Desktop", "path": os.path.join(home, "Desktop")},
+        {"name": "Documents", "path": os.path.join(home, "Documents")},
     ]
     found = [d for d in defaults if os.path.exists(d["path"])]
     return found if found else [{"name": "Current Directory", "path": os.getcwd()}]
@@ -939,11 +944,8 @@ def search_duckduckgo(query, max_results=3):
 
 def load_memories():
     if not os.path.exists(MEMORY_FILE):
-        defaults = [
-            {"id": "1", "content": "User is VexP with dual-boot Ubuntu 24.04 and Windows 11."},
-            {"id": "2", "content": "Hardware: AMD Ryzen 7 6800HS (8C/16T, 22GB RAM) and NVIDIA GeForce RTX 3050 Laptop GPU (CUDA 13.2)."},
-            {"id": "3", "content": "Active development projects: MatchIQ_MultiLeague (Astro, React, Python) and Fifa_project."}
-        ]
+        # Start with an empty memory — user adds their own context
+        defaults = []
         with open(MEMORY_FILE, "w") as f:
             json.dump(defaults, f, indent=2)
         return defaults
@@ -1887,19 +1889,6 @@ async def chat_stream(req: ChatRequest):
     # Dynamic Filesystem Context Detection
     fs_context = ""
     target_proj = os.path.abspath(os.path.expanduser(req.project_path or get_active_workspace()))
-    
-    # Check if user mentioned Zurich_VPS or other known folders
-    prompt_lower = req.prompt.lower()
-    if "zurich" in prompt_lower or "zurich_vps" in prompt_lower:
-        zurich_base = os.path.join(os.path.expanduser("~"), "Desktop", "Zurich_VPS", "home", "mahimalam2400")
-        if os.path.exists(zurich_base):
-            sub_items = [f"📁 {d}" if os.path.isdir(os.path.join(zurich_base, d)) else f"📄 {d}" 
-                         for d in sorted(os.listdir(zurich_base)) if not d.startswith(".")]
-            fs_context += (
-                f"\n\n[LOCAL FILESYSTEM INSPECTION FOR Zurich_VPS]:\n"
-                f"Full Path: {zurich_base}\n"
-                f"Contents:\n" + "\n".join(sub_items[:40]) + "\n"
-            )
 
     # Active workspace contents
     if os.path.exists(target_proj):
@@ -1943,7 +1932,8 @@ async def chat_stream(req: ChatRequest):
         if web_sources:
             web_context = "\n\n".join([f"Source [{s['title']}] ({s['url']}):\n{s['snippet']}" for s in web_sources])
 
-    system_prompt = f"""You are VexP Code, an expert agentic AI software engineer running locally on Ubuntu 24.04 Linux with NVIDIA RTX 3050 GPU acceleration.
+    system_prompt = f"""{SYS_INTRO}
+You are {AGENT_NAME}, an expert agentic AI software engineer.
 You have direct access to tools (read_file_range, search_files, write_file, apply_file_diff, run_terminal_command) to inspect, create, edit, and test files in the workspace.
 
 ACTIVE WORKSPACE LOCATION:
@@ -1954,7 +1944,7 @@ PROJECT CONTEXT & MEMORY:
 {fs_context}
 
 CRITICAL RULES:
-1. You are operating directly inside `{target_proj}`. When writing or editing code, ALWAYS create and modify files directly in this active workspace. Never redirect files to arbitrary external folders like AI_Generated unless explicitly instructed by the user.
+1. You are operating directly inside `{target_proj}`. When writing or editing code, ALWAYS create and modify files directly in this active workspace. Never redirect files to arbitrary external folders unless explicitly instructed by the user.
 2. Use `write_file` to create new files or overwrite existing files in the project.
 3. Use `apply_file_diff` to modify specific sections of existing files.
 4. Use `run_terminal_command` to execute tests, linters, or scripts in the active workspace.

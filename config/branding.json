@@ -1,0 +1,32 @@
+{
+  "_comment": "Edit this file to fully customize the IDE branding, name, and defaults.",
+
+  "app": {
+    "name": "VexP Code IDE",
+    "short_name": "VexP Code",
+    "tagline": "Autonomous AI Coding Harness",
+    "version": "2.6.0",
+    "author": "Your Name",
+    "github_url": "https://github.com/your-username/your-repo"
+  },
+
+  "agent": {
+    "name": "VexP Agent",
+    "welcome_message": "VexP Code AI Ready",
+    "input_placeholder": "Ask VexP Agent about your project...",
+    "terminal_prompt": "vexp $"
+  },
+
+  "server": {
+    "host": "127.0.0.1",
+    "port": 7860
+  },
+
+  "defaults": {
+    "system_prompt_intro": "You are an expert agentic AI software engineer.",
+    "editor_theme": "vs-dark",
+    "editor_font_size": 13,
+    "default_ai_provider": "ollama",
+    "default_ai_model": "qwen2.5:14b"
+  }
+}
