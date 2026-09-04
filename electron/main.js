@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -223,6 +223,18 @@ function createMainWindow() {
 
 // App lifecycle
 app.on('ready', async () => {
+  ipcMain.handle('dialog:openDirectory', async () => {
+    if (!mainWindow) return { canceled: true };
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      title: 'Open Workspace Folder'
+    });
+    if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+      return { canceled: false, path: result.filePaths[0] };
+    }
+    return { canceled: true };
+  });
+
   try {
     await startBackendServer();
     createMainWindow();

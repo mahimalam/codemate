@@ -11,12 +11,12 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-  
-  <!-- xterm.js terminal emulator -->
+  <!-- xterm.js terminal emulator (loaded before Monaco loader to avoid AMD define conflict) -->
   <link rel="stylesheet" href="/vendor/xterm/xterm.css">
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 
   <style>
     :root {
@@ -2647,7 +2647,7 @@
           </div>
         </div>
 
-        <div class="menu-item" onclick="alert('VexP Code IDE — Powered by Qwen 2.5 (14B) on NVIDIA RTX 3050 GPU')">Help</div>
+        <div class="menu-item" onclick="alert('VexP Code IDE — Autonomous AI Coding Harness')">Help</div>
       </nav>
     </div>
 
@@ -2998,7 +2998,7 @@
           <svg class="icon-lg" style="color:var(--ide-accent);" viewBox="0 0 24 24"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"></path></svg>
           <div class="welcome-title">VexP Code AI Ready</div>
           <p class="welcome-desc">
-            Autonomous software engineer running locally on your RTX 3050 GPU. Ask questions, request file edits, or run terminal commands.
+            Autonomous AI software engineer for local and cloud models. Ask questions, request file edits, or run terminal commands.
           </p>
         </div>
       </div>
@@ -3036,7 +3036,7 @@
               <div class="prompt-model-popover" id="promptModelPopover" onclick="event.stopPropagation()">
                 <div class="prompt-model-header">
                   <span>Select Model</span>
-                  <span class="badge-vram" id="promptVramBadge">RTX 3050</span>
+                  <span class="badge-vram" id="promptVramBadge">Local GPU</span>
                 </div>
                 <div class="model-group-title">Local Models (Ollama)</div>
                 <div id="promptLocalModelsList" class="model-list-container">
@@ -3147,7 +3147,7 @@
               <div class="provider-card-header">
                 <div class="provider-badge-title">
                   <span class="provider-icon-tag local">LOCAL</span>
-                  <strong>Ollama (GPU Accelerated • RTX 3050)</strong>
+                  <strong>Ollama (Local GPU)</strong>
                 </div>
                 <button class="btn-subtle" onclick="testProviderConnection('ollama')">Test Local Host</button>
               </div>
@@ -3443,7 +3443,7 @@
       {
         path: "",
         name: "welcome.md",
-        content: "# Welcome to VexP Code IDE\n\n- Standalone developer environment powered by local Qwen 2.5 (14B) on NVIDIA RTX 3050.\n- Dynamic file system: Open any folder on your machine or pick via KDE dialog.\n- Hit Ctrl+S to save files directly to disk.\n- Run terminal commands below in the integrated console.\n",
+        content: "# Welcome to VexP Code IDE\n\n- Autonomous AI Coding Harness & Desktop IDE.\n- Open any workspace folder via File > Open Folder...\n- Integrated interactive bash terminal with full PTY support.\n- Hit Ctrl+S to save files directly to disk.\n",
         language: "markdown"
       }
     ];
@@ -3759,7 +3759,7 @@
               <div class="preset-name">${escapeHtml(p.name)}</div>
               ${isCurrent ? '<span style="font-size:10px; color:#4ade80; font-weight:600; padding:1px 5px; background:rgba(74,222,128,0.12); border-radius:3px;">Current</span>' : ''}
             </div>
-            <div class="preset-path">${escapeHtml(p.path.replace(os.homedir ? os.homedir() : '/home', '~').replace(/\/[^\/]+/, '~'))}</div>
+            <div class="preset-path">${escapeHtml(p.path ? p.path.replace(/\/home\/[^\/]+/, '~') : '')}</div>
           </div>
         `;
         card.onclick = () => selectWorkspace(p.path);
@@ -3788,10 +3788,14 @@
         currentRecentList = data.recent || [];
 
         const title = data.has_workspace ? data.name : "No Folder Open";
-        document.getElementById("topWorkspaceTitle").innerText = title;
-        document.getElementById("sidebarHeaderTitle").innerText = data.has_workspace ? `EXPLORER: ${data.name.toUpperCase()}` : "NO FOLDER OPENED";
-        document.getElementById("bcProjectName").innerText = title;
-        document.getElementById("termPromptBadge").innerText = data.has_workspace ? `${data.name} $` : "user $";
+        const topTitle = document.getElementById("topWorkspaceTitle");
+        if (topTitle) topTitle.innerText = title;
+        const sideTitle = document.getElementById("sidebarHeaderTitle");
+        if (sideTitle) sideTitle.innerText = data.has_workspace ? `EXPLORER: ${data.name.toUpperCase()}` : "NO FOLDER OPENED";
+        const bcName = document.getElementById("bcProjectName");
+        if (bcName) bcName.innerText = title;
+        const promptBadge = document.getElementById("termPromptBadge");
+        if (promptBadge) promptBadge.innerText = data.has_workspace ? `${data.name} $` : "user $";
 
         // Populate "Open Recent" Submenu in File Menu (VSCode / Cursor style)
         const submenu = document.getElementById("submenuRecentWorkspaces");
@@ -3859,6 +3863,13 @@
       closeWorkspaceModal();
       closeAllMenus();
       try {
+        if (window.desktopApp && window.desktopApp.openDirectory) {
+          const res = await window.desktopApp.openDirectory();
+          if (!res.canceled && res.path) {
+            await selectWorkspace(res.path);
+          }
+          return;
+        }
         const res = await fetch("/api/workspace/pick-native", { method: "POST" });
         const data = await res.json();
         if (!data.cancelled && data.has_workspace) {
@@ -3993,7 +4004,7 @@
       const indicator = document.getElementById("topModelIndicator");
       if (label) {
         if (provider === "ollama") {
-          label.textContent = `${model} (RTX 3050)`;
+          label.textContent = `${model} (Local)`;
           if (indicator) indicator.style.background = "#10b981";
         } else if (provider.startsWith("custom_")) {
           label.textContent = `${model} (Proxy)`;
@@ -6041,12 +6052,15 @@
     function initXterm() {
       if (xtermInstance) return;
       const container = document.getElementById("terminalXtermContainer");
-      if (!container || typeof Terminal === "undefined") {
-        console.warn("xterm.js not loaded or container not found");
+      if (!container) return;
+
+      const TermClass = (typeof Terminal !== "undefined") ? (Terminal.Terminal || Terminal) : null;
+      if (!TermClass || typeof TermClass !== "function") {
+        console.warn("xterm.js Terminal constructor not found");
         return;
       }
 
-      xtermInstance = new Terminal({
+      xtermInstance = new TermClass({
         theme: {
           background: '#181818',
           foreground: '#d4d4d4',
@@ -6079,9 +6093,14 @@
         allowProposedApi: true
       });
 
-      if (typeof FitAddon !== "undefined" && FitAddon.FitAddon) {
-        xtermFitAddon = new FitAddon.FitAddon();
-        xtermInstance.loadAddon(xtermFitAddon);
+      const FitClass = (typeof FitAddon !== "undefined") ? (FitAddon.FitAddon || FitAddon) : null;
+      if (FitClass && typeof FitClass === "function") {
+        try {
+          xtermFitAddon = new FitClass();
+          xtermInstance.loadAddon(xtermFitAddon);
+        } catch(e) {
+          console.warn("Could not load FitAddon:", e);
+        }
       }
 
       xtermInstance.open(container);

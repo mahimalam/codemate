@@ -6,6 +6,7 @@ import time
 import uuid
 import threading
 import subprocess
+import shutil
 import urllib.request
 import pty
 import fcntl
