@@ -2647,15 +2647,15 @@
           </div>
         </div>
 
-        <div class="menu-item" onclick="alert('VexP Code IDE — Autonomous AI Coding Harness')">Help</div>
+        <div class="menu-item" onclick="alert('VexP Code IDE: Autonomous AI Coding Harness')">Help</div>
       </nav>
     </div>
 
     <!-- Center Workspace Title -->
     <div class="titlebar-center" onclick="openWorkspaceModal()" title="Click to Switch Project Folder">
       <svg class="icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-      <span id="topWorkspaceTitle">MatchIQ_MultiLeague</span>
-      <span style="color: var(--text-dim);">— VexP Code IDE</span>
+      <span id="topWorkspaceTitle">Workspace</span>
+      <span style="color: var(--text-dim);">- VexP Code IDE</span>
     </div>
 
     <!-- Right Controls -->
@@ -5775,7 +5775,7 @@
         if (userInput && cfg.username) userInput.value = cfg.username;
         if (emailInput && cfg.email) emailInput.value = cfg.email;
 
-        // Repopulate PAT field — token is stored in the git remote URL
+        // Repopulate PAT field (token is stored in the git remote URL)
         if (patInput) {
           if (cfg.saved_token) {
             patInput.value = cfg.saved_token;

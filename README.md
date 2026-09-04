@@ -1,4 +1,4 @@
-# AI Code IDE — Autonomous AI Coding Harness
+# AI Code IDE: Autonomous AI Coding Harness
 
 > A fully open-source, self-hosted AI coding IDE you can run entirely on your own machine or server. Supports **local GPU inference** (Ollama), **cloud APIs** (OpenRouter, Anthropic, OpenAI), and **any OpenAI-compatible proxy**. Built for developers who want total control.
 
@@ -12,13 +12,13 @@
 
 | Feature | Description |
 |---|---|
-| **5-Layer Agentic Loop** | Mirrors Claude Code & Devin — context clustering → intent planning → autonomous tool dispatch → self-correction → diff assembly |
+| **5-Layer Agentic Loop** | Mirrors Claude Code & Devin: context clustering → intent planning → autonomous tool dispatch → self-correction → diff assembly |
 | **Multi-Provider AI** | Ollama (local GPU), OpenRouter (100+ models), Anthropic, OpenAI, or **any custom OpenAI-compatible proxy** |
 | **Monaco Editor** | VS Code-grade editor with syntax highlighting, code folding, tabbed editing |
 | **Integrated Terminal** | Real shell execution from the browser |
 | **Source Control** | Full Git commit / push / pull UI with GitHub PAT integration |
 | **AI Memory** | Persistent per-user memory the agent reads on every request |
-| **Fully Customizable** | Change name, branding, agent persona, default models — all in one config file |
+| **Fully Customizable** | Change name, branding, agent persona, default models in one config file |
 
 ---
 
@@ -101,7 +101,7 @@ This generates:
 
 ### Branding (name, agent persona, terminal prompt)
 
-Edit **`config/branding.json`** — this is the single source of truth for all user-facing names:
+Edit **`config/branding.json`** to configure all user-facing names:
 
 ```json
 {
@@ -129,13 +129,13 @@ Click the **⚙ Gear** icon in the IDE → **AI Providers & Models**:
 
 | Provider | What to enter |
 |---|---|
-| **Ollama (local)** | Endpoint URL (default: `http://127.0.0.1:11434`) — no API key needed |
+| **Ollama (local)** | Endpoint URL (default: `http://127.0.0.1:11434`) (no API key needed) |
 | **OpenRouter** | Your `sk-or-...` API key |
 | **Anthropic** | Your `sk-ant-...` API key |
 | **OpenAI** | Your `sk-...` API key |
 | **Custom Proxy** | Any OpenAI-compatible base URL + key |
 
-All keys are stored **locally** in `~/.claude_code_ide/provider_config.json` — never committed to git.
+All keys are stored **locally** in `~/.claude_code_ide/provider_config.json` and never committed to git.
 
 ### Environment Variables (optional)
 
@@ -172,10 +172,10 @@ cp .env.example .env
 
 The following are in `.gitignore` and **never** pushed:
 
-- `~/.claude_code_ide/` — all your API keys, chat history, memories, workspaces
-- `.env` — any local environment secrets
-- `*.log` — server logs
-- `graphify-out/` — knowledge graph cache
+- `~/.claude_code_ide/`: all your API keys, chat history, memories, workspaces
+- `.env`: local environment secrets
+- `*.log`: server logs
+- `graphify-out/`: knowledge graph cache
 
 ---
 
@@ -204,4 +204,4 @@ PRs are welcome. Please:
 
 ## 📄 License
 
-MIT License — free for personal and commercial use. See [LICENSE](LICENSE).
+MIT License. Free for personal and commercial use. See [LICENSE](LICENSE).

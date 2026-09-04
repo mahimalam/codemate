@@ -179,7 +179,7 @@ def load_recent_workspaces() -> List[Dict[str, str]]:
                 return json.load(f)
         except:
             pass
-    # Seed with sensible defaults — no personal paths
+    # Seed with sensible defaults (no personal paths)
     home = os.path.expanduser("~")
     defaults = [
         {"name": os.path.basename(PROJECT_ROOT), "path": os.path.abspath(PROJECT_ROOT)},
@@ -582,7 +582,7 @@ def git_commit_endpoint(payload: GitCommitPayload):
         if not status_res.stdout.strip():
             return {
                 "success": False,
-                "output": "Nothing to commit — working tree is completely clean. Edit or modify files first before creating a commit."
+                "output": "Nothing to commit: working tree is clean. Edit files first before creating a commit."
             }
 
         res = subprocess.run(["git", "commit", "-m", msg], capture_output=True, text=True, cwd=target_dir)
@@ -1065,7 +1065,7 @@ def search_duckduckgo(query, max_results=3):
 
 def load_memories():
     if not os.path.exists(MEMORY_FILE):
-        # Start with an empty memory — user adds their own context
+        # Start with an empty memory: user adds their own context
         defaults = []
         with open(MEMORY_FILE, "w") as f:
             json.dump(defaults, f, indent=2)
