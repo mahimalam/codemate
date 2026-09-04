@@ -559,6 +559,15 @@ def git_commit_endpoint(payload: GitCommitPayload):
     try:
         if payload.stage_all:
             subprocess.run(["git", "add", "-A"], capture_output=True, text=True, cwd=target_dir)
+
+        # Check if working tree has changes
+        status_res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=target_dir)
+        if not status_res.stdout.strip():
+            return {
+                "success": False,
+                "output": "Nothing to commit — working tree is completely clean. Edit or modify files first before creating a commit."
+            }
+
         res = subprocess.run(["git", "commit", "-m", msg], capture_output=True, text=True, cwd=target_dir)
         return {
             "success": res.returncode == 0,
@@ -573,12 +582,28 @@ def git_push_endpoint(payload: GitRemotePayload):
     try:
         branch = payload.branch
         if not branch:
-            branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
-        cmd = ["git", "push", payload.remote or "origin", branch or "main"]
+            branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip() or "main"
+        cmd = ["git", "push", "-u", payload.remote or "origin", branch]
         res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+        raw_out = res.stdout.strip() or res.stderr.strip()
+        clean_out = re.sub(r'https://[^@]+@', 'https://', raw_out)
+
+        if res.returncode != 0:
+            if ("Permission to" in clean_out and "denied" in clean_out) or "403" in clean_out:
+                clean_out = (
+                    "GitHub Authentication Error (HTTP 403 Forbidden):\n"
+                    "Permission denied to push to this repository.\n\n"
+                    "Root Cause: Your GitHub Personal Access Token is valid for identification, but does NOT have write permissions.\n\n"
+                    "To fix this:\n"
+                    "1. Go to https://github.com/settings/tokens/new?scopes=repo&description=VexP+Code+IDE\n"
+                    "2. Make sure the 'repo' scope (Full control of private repositories) is checked.\n"
+                    "3. Generate and paste the new token in the GitHub Connection modal."
+                )
+            return {"success": False, "output": clean_out}
+
         return {
-            "success": res.returncode == 0,
-            "output": res.stdout.strip() or res.stderr.strip()
+            "success": True,
+            "output": clean_out or f"Successfully pushed branch '{branch}' to remote."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -694,10 +719,18 @@ def git_test_remote_endpoint(payload: GitTestRemotePayload):
     target_dir = payload.path or get_active_workspace()
     try:
         test_target = payload.remote or "origin"
+        tok = (payload.token or "").strip()
+
+        # If token was not explicitly supplied, extract it from existing origin remote if present
+        if not tok:
+            curr_rem = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+            match = re.search(r'https://([^:]+):([^@]+)@', curr_rem) or re.search(r'https://([^@]+)@', curr_rem)
+            if match:
+                tok = match.group(2) if match.lastindex == 2 else match.group(1)
+
         if payload.url:
             u = payload.url.strip()
-            if payload.token and payload.token.strip() and u.startswith("https://"):
-                tok = payload.token.strip()
+            if tok and u.startswith("https://"):
                 clean = re.sub(r'^https://[^@]+@', 'https://', u)
                 if payload.username and payload.username.strip():
                     test_target = clean.replace("https://", f"https://{payload.username.strip()}:{tok}@")
@@ -706,12 +739,41 @@ def git_test_remote_endpoint(payload: GitTestRemotePayload):
             else:
                 test_target = u
 
+        # Check GitHub token permissions via GitHub API
+        if tok and (tok.startswith("ghp_") or tok.startswith("github_pat_")):
+            try:
+                gh_req = urllib.request.Request(
+                    "https://api.github.com/user",
+                    headers={
+                        "Authorization": f"token {tok}",
+                        "User-Agent": STANDARD_USER_AGENT,
+                        "Accept": "application/vnd.github.v3+json"
+                    }
+                )
+                with urllib.request.urlopen(gh_req, timeout=8) as gh_resp:
+                    scopes = gh_resp.headers.get("x-oauth-scopes", "")
+                    scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+                    if "repo" not in scope_list and "public_repo" not in scope_list:
+                        return {
+                            "success": False,
+                            "output": (
+                                "⚠️ Token Warning: Your GitHub token is valid, but MISSING WRITE PERMISSIONS!\n\n"
+                                "GitHub will block 'git push' with Error 403 Forbidden because the 'repo' scope is not checked.\n\n"
+                                "To fix this:\n"
+                                "1. Visit https://github.com/settings/tokens/new?scopes=repo&description=VexP+Code+IDE\n"
+                                "2. Generate the token with the 'repo' scope checked.\n"
+                                "3. Paste the new token here."
+                            )
+                        }
+            except Exception:
+                pass
+
         res = subprocess.run(["git", "ls-remote", test_target], capture_output=True, text=True, cwd=target_dir, timeout=12)
         if res.returncode == 0:
             lines = res.stdout.strip().splitlines()
             return {
                 "success": True,
-                "output": f"Connection verified! Found {len(lines)} references on remote repository.",
+                "output": f"Connection and repository access verified! Found {len(lines)} references on remote.",
                 "refs_count": len(lines)
             }
         else:
