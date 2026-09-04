@@ -1733,6 +1733,26 @@
     .step-segment.done {
       background: #10b981;
     }
+    .step-segment.error {
+      background: #ef4444 !important;
+    }
+    .harness-step.error {
+      color: #fca5a5 !important;
+    }
+    .claude-harness.failed .claude-sunburst-glyph {
+      color: #ef4444 !important;
+    }
+    .claude-harness.failed .claude-verb-name {
+      color: #f87171 !important;
+    }
+    .claude-harness.failed .layer-pill {
+      background: rgba(239, 68, 68, 0.15) !important;
+      color: #ef4444 !important;
+      border: 1px solid rgba(239, 68, 68, 0.4) !important;
+    }
+    .claude-harness.failed .ticker-text {
+      color: #fca5a5 !important;
+    }
 
     /* COMPLETED STATE: Still, Clean, Keeps Colors, Zero Animation, Zero Glow */
     .claude-harness.completed .claude-sunburst-glyph {
@@ -2373,6 +2393,112 @@
       border-color: var(--ide-accent);
       color: var(--ide-accent);
     }
+
+    /* Universal Preset Selector & Quick Connect */
+    .preset-selector-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      background: #1c1c1c;
+      border: 1px solid var(--ide-border-subtle);
+      border-radius: 6px;
+    }
+    .preset-bar-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+    .preset-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e0e0e0;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 9px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .preset-chip:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      transform: translateY(-1px);
+    }
+    .preset-chip.add-custom {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #10b981;
+    }
+    .preset-chip.add-custom:hover {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #10b981;
+      color: #ffffff;
+    }
+    .btn-action-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+    .btn-probe {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .btn-probe:hover {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: #38bdf8;
+      color: #ffffff;
+    }
+    .custom-provider-box {
+      background: #222222;
+      border: 1px solid var(--ide-border-subtle);
+      border-left: 3px solid #38bdf8;
+      border-radius: 6px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .custom-provider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .btn-remove-provider {
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #ef4444;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-remove-provider:hover {
+      background: rgba(239, 68, 68, 0.18);
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
@@ -2957,6 +3083,20 @@
               <p>Configure local Ollama execution or external OpenAI-compatible & Anthropic providers. Models automatically appear in the top Model Switcher once configured.</p>
             </div>
 
+            <!-- Universal Preset Selector Bar -->
+            <div class="preset-selector-bar">
+              <span class="preset-bar-title">Presets:</span>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('mwapi')">MWAPI (Claude)</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('deepseek')">DeepSeek</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('groq')">Groq (Ultra-Fast)</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('lmstudio')">LM Studio (Local)</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('ollama')">Ollama (GPU)</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('claude')">Claude (Direct)</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('openai')">OpenAI</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('openrouter')">OpenRouter</button>
+              <button type="button" class="preset-chip add-custom" onclick="addNewCustomProvider()">+ Add 3rd-Party Proxy</button>
+            </div>
+
             <!-- Provider Card: Ollama (Local) -->
             <div class="provider-card">
               <div class="provider-card-header">
@@ -3009,9 +3149,14 @@
                 </div>
                 <div class="field-row" style="margin-top: 8px;">
                   <label>Model Identifier</label>
-                  <input type="text" class="custom-input" id="cfgOpenrouterModel" value="anthropic/claude-3.5-sonnet" placeholder="anthropic/claude-3.5-sonnet">
+                  <input type="text" class="custom-input" id="cfgOpenrouterModel" list="listOpenrouterModels" value="anthropic/claude-3.5-sonnet" placeholder="anthropic/claude-3.5-sonnet">
+                  <datalist id="listOpenrouterModels"></datalist>
                 </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+                  <button class="btn-probe" type="button" onclick="probeAndFetchModels('openrouter')">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z"/></svg>
+                    Auto-Detect & Fetch Models
+                  </button>
                   <button class="btn-subtle" onclick="testProviderConnection('openrouter')">Test OpenRouter</button>
                 </div>
               </div>
@@ -3022,7 +3167,7 @@
               <div class="provider-card-header">
                 <div class="provider-badge-title">
                   <span class="provider-icon-tag cloud">OPENAI</span>
-                  <strong>OpenAI & Compatible (DeepSeek / Groq / vLLM)</strong>
+                  <strong>OpenAI & Compatible (MWAPI / DeepSeek / Groq / LM Studio)</strong>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" id="cfgOpenaiEnabled">
@@ -3032,7 +3177,7 @@
               <div class="provider-fields">
                 <div class="field-row">
                   <label>Base URL Endpoint</label>
-                  <input type="text" class="custom-input" id="cfgOpenaiBaseUrl" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+                  <input type="text" class="custom-input" id="cfgOpenaiBaseUrl" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1 or https://api.mwapi.dev/v1">
                 </div>
                 <div class="field-row" style="margin-top: 8px;">
                   <label>API Key</label>
@@ -3045,20 +3190,25 @@
                 </div>
                 <div class="field-row" style="margin-top: 8px;">
                   <label>Model Identifier</label>
-                  <input type="text" class="custom-input" id="cfgOpenaiModel" value="gpt-4o" placeholder="gpt-4o or deepseek-chat">
+                  <input type="text" class="custom-input" id="cfgOpenaiModel" list="listOpenaiModels" value="gpt-4o" placeholder="gpt-4o, claude-sonnet-4-6, deepseek-chat">
+                  <datalist id="listOpenaiModels"></datalist>
                 </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+                  <button class="btn-probe" type="button" onclick="probeAndFetchModels('openai')">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z"/></svg>
+                    Auto-Detect & Fetch Models
+                  </button>
                   <button class="btn-subtle" onclick="testProviderConnection('openai')">Test Connection</button>
                 </div>
               </div>
             </div>
 
-            <!-- Provider Card: Anthropic Claude Direct -->
+            <!-- Provider Card: Anthropic Claude Direct or Proxy -->
             <div class="provider-card">
               <div class="provider-card-header">
                 <div class="provider-badge-title">
                   <span class="provider-icon-tag cloud">CLAUDE</span>
-                  <strong>Anthropic Claude (Direct API)</strong>
+                  <strong>Anthropic Claude (Official API or Proxy / MWAPI)</strong>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" id="cfgAnthropicEnabled">
@@ -3067,9 +3217,13 @@
               </div>
               <div class="provider-fields">
                 <div class="field-row">
+                  <label>Base URL Endpoint (Direct or Proxy)</label>
+                  <input type="text" class="custom-input" id="cfgAnthropicBaseUrl" value="https://api.anthropic.com/v1" placeholder="https://api.anthropic.com/v1 or https://api.mwapi.dev/v1">
+                </div>
+                <div class="field-row" style="margin-top: 8px;">
                   <label>Anthropic API Key</label>
                   <div class="key-input-wrapper">
-                    <input type="password" class="custom-input" id="cfgAnthropicKey" placeholder="sk-ant-api03-...">
+                    <input type="password" class="custom-input" id="cfgAnthropicKey" placeholder="sk-ant-api03-... or proxy key">
                     <button class="btn-eye-toggle" onclick="toggleKeyVisibility('cfgAnthropicKey')" type="button">
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><circle cx="8" cy="8" r="3"/></svg>
                     </button>
@@ -3077,11 +3231,30 @@
                 </div>
                 <div class="field-row" style="margin-top: 8px;">
                   <label>Model Identifier</label>
-                  <input type="text" class="custom-input" id="cfgAnthropicModel" value="claude-3-5-sonnet-20241022" placeholder="claude-3-5-sonnet-20241022">
+                  <input type="text" class="custom-input" id="cfgAnthropicModel" list="listAnthropicModels" value="claude-3-5-sonnet-20241022" placeholder="claude-3-5-sonnet-20241022 or claude-sonnet-4-6">
+                  <datalist id="listAnthropicModels"></datalist>
                 </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+                  <button class="btn-probe" type="button" onclick="probeAndFetchModels('anthropic')">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z"/></svg>
+                    Auto-Detect & Fetch Models
+                  </button>
                   <button class="btn-subtle" onclick="testProviderConnection('anthropic')">Test Anthropic</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Custom 3rd-Party Providers Section -->
+            <div id="customProvidersSection" style="margin-top: 18px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid var(--ide-border-subtle); padding-bottom: 6px;">
+                <div style="font-size: 13px; font-weight: 600; color: #ffffff; display: flex; align-items: center; gap: 6px;">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="#38bdf8"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm1 11.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm.5-3.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h1.5V5.5a1.5 1.5 0 1 1 3 0c0 .72-.34 1.25-.8 1.63-.38.31-.7.54-.7.87z"/></svg>
+                  <span>Custom 3rd-Party Proxies & Relays</span>
+                </div>
+                <button class="btn-subtle" type="button" onclick="addNewCustomProvider()">+ Add Provider</button>
+              </div>
+              <div id="customProvidersContainer">
+                <!-- Dynamically rendered custom providers -->
               </div>
             </div>
 
@@ -3731,17 +3904,20 @@
         const renderCloud = (container) => {
           if (!container) return;
           if (!data.cloud_models || data.cloud_models.length === 0) {
-            container.innerHTML = `<div style="padding: 6px 14px; color: var(--text-dim); font-size: 11px;">No cloud providers enabled</div>`;
+            container.innerHTML = `<div style="padding: 6px 14px; color: var(--text-dim); font-size: 11px;">No cloud or proxy providers enabled</div>`;
           } else {
             container.innerHTML = data.cloud_models.map(m => {
               const isActive = (currentActiveProvider === m.provider && currentActiveModel === m.model);
+              const isCustom = (m.category === 'custom');
+              const tagLabel = isCustom ? (m.custom_name || 'Proxy') : (m.provider || 'Cloud').toUpperCase();
+              const tagColor = isCustom ? '#a78bfa' : '#38bdf8';
               return `
                 <div class="model-choice-item ${isActive ? 'active' : ''}" onclick="switchModel('${escapeHtml(m.provider)}', '${escapeHtml(m.model)}')">
                   <div style="display: flex; align-items: center; gap: 6px;">
                     ${isActive ? '<svg viewBox="0 0 16 16" width="12" height="12" fill="var(--ide-accent)"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>' : '<span style="width: 12px;"></span>'}
                     <span>${escapeHtml(m.name)}</span>
                   </div>
-                  <span class="model-tag-detail" style="color: #38bdf8;">Cloud</span>
+                  <span class="model-tag-detail" style="color: ${tagColor}; border-color: ${tagColor}44;">${escapeHtml(tagLabel)}</span>
                 </div>
               `;
             }).join("");
@@ -3766,6 +3942,9 @@
         if (provider === "ollama") {
           label.textContent = `${model} (RTX 3050)`;
           if (indicator) indicator.style.background = "#10b981";
+        } else if (provider.startsWith("custom_")) {
+          label.textContent = `${model} (Proxy)`;
+          if (indicator) indicator.style.background = "#a78bfa";
         } else {
           label.textContent = `${model} (${provider.toUpperCase()})`;
           if (indicator) indicator.style.background = "#38bdf8";
@@ -3777,7 +3956,7 @@
       if (inpromptName) {
         inpromptName.textContent = model;
         if (inpromptDot) {
-          inpromptDot.style.background = (provider === "ollama") ? "#10b981" : "#38bdf8";
+          inpromptDot.style.background = (provider === "ollama") ? "#10b981" : (provider.startsWith("custom_") ? "#a78bfa" : "#38bdf8");
         }
       }
     }
@@ -3850,6 +4029,400 @@
       }
     }
 
+    // Provider presets mapping
+    const PROVIDER_PRESETS = {
+      mwapi: {
+        target: 'custom',
+        name: 'MWAPI (Claude Proxy)',
+        base_url: 'https://api.mwapi.dev/v1',
+        model: 'claude-sonnet-4-6',
+        type: 'openai',
+        help: 'MWAPI 3rd-party proxy for Claude models (OpenAI protocol)'
+      },
+      deepseek: {
+        target: 'openai',
+        name: 'DeepSeek Official',
+        base_url: 'https://api.deepseek.com/v1',
+        model: 'deepseek-chat',
+        help: 'DeepSeek V3 and DeepSeek R1 reasoning models'
+      },
+      groq: {
+        target: 'openai',
+        name: 'Groq Cloud',
+        base_url: 'https://api.groq.com/openai/v1',
+        model: 'llama-3.3-70b-versatile',
+        help: 'Ultra-fast LPU inference (Llama 3.3, Mixtral)'
+      },
+      lmstudio: {
+        target: 'openai',
+        name: 'LM Studio (Local)',
+        base_url: 'http://127.0.0.1:1234/v1',
+        model: 'local-model',
+        help: 'Local models running in LM Studio'
+      },
+      ollama: {
+        target: 'ollama',
+        name: 'Local Ollama',
+        base_url: 'http://127.0.0.1:11434',
+        help: 'Local GPU/CPU inference without cloud dependencies'
+      },
+      claude: {
+        target: 'anthropic',
+        name: 'Anthropic Claude Official',
+        base_url: 'https://api.anthropic.com/v1',
+        model: 'claude-3-5-sonnet-20241022',
+        help: 'Direct official Anthropic API'
+      },
+      openai: {
+        target: 'openai',
+        name: 'OpenAI Direct',
+        base_url: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+        help: 'Official OpenAI GPT-4o, GPT-4o-mini, o1'
+      },
+      openrouter: {
+        target: 'openrouter',
+        name: 'OpenRouter',
+        base_url: 'https://openrouter.ai/api/v1',
+        model: 'anthropic/claude-3.5-sonnet',
+        help: 'Unified access to 100+ AI models through one single key'
+      }
+    };
+
+    let customProvidersList = [];
+
+    function applyProviderPreset(key) {
+      const preset = PROVIDER_PRESETS[key];
+      if (!preset) return;
+
+      if (preset.target === 'custom') {
+        let existing = customProvidersList.find(cp => cp.name.toLowerCase().includes('mwapi') || (cp.base_url && cp.base_url.includes('mwapi.dev')));
+        if (!existing) {
+          const newId = "cp_" + Math.random().toString(36).substring(2, 9);
+          existing = {
+            id: newId,
+            name: preset.name,
+            type: preset.type || 'openai',
+            base_url: preset.base_url,
+            api_key: '',
+            model: preset.model || 'claude-sonnet-4-6',
+            enabled: true
+          };
+          customProvidersList.push(existing);
+        } else {
+          existing.base_url = preset.base_url;
+          existing.model = preset.model;
+          existing.enabled = true;
+        }
+        renderCustomProviders();
+        setTimeout(() => highlightProviderCard(`cfgCustomKey_${existing.id}`), 50);
+      } else if (preset.target === 'ollama') {
+        const url = document.getElementById("cfgOllamaUrl");
+        if (url) url.value = preset.base_url;
+        highlightProviderCard('cfgOllamaUrl');
+      } else if (preset.target === 'openrouter') {
+        const toggle = document.getElementById("cfgOpenrouterEnabled");
+        if (toggle) toggle.checked = true;
+        const mod = document.getElementById("cfgOpenrouterModel");
+        if (mod && preset.model) mod.value = preset.model;
+        highlightProviderCard('cfgOpenrouterKey');
+      } else if (preset.target === 'openai') {
+        const toggle = document.getElementById("cfgOpenaiEnabled");
+        if (toggle) toggle.checked = true;
+        const base = document.getElementById("cfgOpenaiBaseUrl");
+        if (base) base.value = preset.base_url;
+        const mod = document.getElementById("cfgOpenaiModel");
+        if (mod && preset.model) mod.value = preset.model;
+        highlightProviderCard('cfgOpenaiKey');
+      } else if (preset.target === 'anthropic') {
+        const toggle = document.getElementById("cfgAnthropicEnabled");
+        if (toggle) toggle.checked = true;
+        const base = document.getElementById("cfgAnthropicBaseUrl");
+        if (base) base.value = preset.base_url;
+        const mod = document.getElementById("cfgAnthropicModel");
+        if (mod && preset.model) mod.value = preset.model;
+        highlightProviderCard('cfgAnthropicKey');
+      }
+
+      const banner = document.getElementById("settingsStatusMsg");
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.background = "rgba(56, 189, 248, 0.12)";
+        banner.style.border = "1px solid #38bdf8";
+        banner.style.color = "#38bdf8";
+        banner.textContent = `Applied preset: ${preset.name}. ${preset.help}. Just paste your API key & click "Auto-Detect & Fetch Models"!`;
+      }
+    }
+
+    function highlightProviderCard(targetInputId) {
+      const el = document.getElementById(targetInputId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+        el.style.boxShadow = "0 0 0 2px #38bdf8";
+        setTimeout(() => { el.style.boxShadow = ""; }, 1800);
+      }
+    }
+
+    function renderCustomProviders() {
+      const container = document.getElementById("customProvidersContainer");
+      if (!container) return;
+
+      if (!customProvidersList || customProvidersList.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px dashed var(--ide-border-subtle); border-radius: 6px; text-align: center; color: var(--text-dim); font-size: 11px;">
+            No custom proxies configured. Click <strong>"+ Add Provider"</strong> or use the <strong>Presets</strong> above to connect MWAPI, LM Studio, DeepSeek, or any 3rd-party relay.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = customProvidersList.map((cp) => {
+        const isAnthropic = (cp.type === 'anthropic');
+        return `
+          <div class="custom-provider-box" id="boxCustom_${cp.id}">
+            <div class="custom-provider-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="provider-icon-tag ${isAnthropic ? 'cloud' : 'local'}" id="tagCustom_${cp.id}">
+                  ${isAnthropic ? 'ANTHROPIC' : 'OPENAI'}
+                </span>
+                <input type="text" class="custom-input" id="cfgCustomName_${cp.id}" value="${escapeHtml(cp.name || 'Custom Proxy')}" style="font-weight: 600; font-size: 12px; padding: 3px 8px; width: 170px;" placeholder="Provider Name">
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <label class="toggle-switch" title="Enable/Disable Provider">
+                  <input type="checkbox" id="cfgCustomEnabled_${cp.id}" ${cp.enabled ? 'checked' : ''}>
+                  <span class="slider"></span>
+                </label>
+                <button class="btn-remove-provider" type="button" onclick="removeCustomProvider('${cp.id}')" title="Remove Provider">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            <div class="provider-fields">
+              <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px;">
+                <div class="field-row">
+                  <label>Protocol Format</label>
+                  <select class="custom-input" id="cfgCustomType_${cp.id}" onchange="updateCustomTag('${cp.id}')">
+                    <option value="openai" ${cp.type === 'openai' ? 'selected' : ''}>OpenAI Compatible</option>
+                    <option value="anthropic" ${cp.type === 'anthropic' ? 'selected' : ''}>Anthropic Claude</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label>Base URL Endpoint</label>
+                  <input type="text" class="custom-input" id="cfgCustomBaseUrl_${cp.id}" value="${escapeHtml(cp.base_url || '')}" placeholder="e.g. https://api.mwapi.dev/v1 or http://localhost:1234/v1">
+                </div>
+              </div>
+
+              <div class="field-row" style="margin-top: 8px;">
+                <label>API Key / Bearer Token</label>
+                <div class="key-input-wrapper">
+                  <input type="password" class="custom-input" id="cfgCustomKey_${cp.id}" value="${escapeHtml(cp.masked_key || cp.api_key || '')}" placeholder="sk-... or proxy token (leave blank for local models)">
+                  <button class="btn-eye-toggle" onclick="toggleKeyVisibility('cfgCustomKey_${cp.id}')" type="button">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><circle cx="8" cy="8" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="field-row" style="margin-top: 8px;">
+                <label>Model Identifier</label>
+                <input type="text" class="custom-input" id="cfgCustomModel_${cp.id}" list="listCustomModels_${cp.id}" value="${escapeHtml(cp.model || '')}" placeholder="e.g. claude-sonnet-4-6 or deepseek-chat">
+                <datalist id="listCustomModels_${cp.id}"></datalist>
+              </div>
+
+              <div class="btn-action-group">
+                <button class="btn-probe" type="button" onclick="probeAndFetchModels('custom', '${cp.id}')">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z"/></svg>
+                  Auto-Detect & Fetch Models
+                </button>
+                <button class="btn-subtle" type="button" onclick="testCustomConnection('${cp.id}')">Test Connection</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function updateCustomTag(id) {
+      const type = document.getElementById(`cfgCustomType_${id}`)?.value || 'openai';
+      const tag = document.getElementById(`tagCustom_${id}`);
+      if (tag) {
+        tag.textContent = (type === 'anthropic') ? 'ANTHROPIC' : 'OPENAI';
+        tag.className = `provider-icon-tag ${type === 'anthropic' ? 'cloud' : 'local'}`;
+      }
+    }
+
+    function addNewCustomProvider() {
+      const newId = 'cp_' + Math.random().toString(36).substring(2, 9);
+      customProvidersList.push({
+        id: newId,
+        name: '3rd-Party Proxy',
+        type: 'openai',
+        base_url: 'https://api.mwapi.dev/v1',
+        api_key: '',
+        model: 'claude-sonnet-4-6',
+        enabled: true
+      });
+      renderCustomProviders();
+      highlightProviderCard(`cfgCustomBaseUrl_${newId}`);
+    }
+
+    function removeCustomProvider(id) {
+      customProvidersList = customProvidersList.filter(cp => cp.id !== id);
+      renderCustomProviders();
+    }
+
+    async function testCustomConnection(id) {
+      const banner = document.getElementById("settingsStatusMsg");
+      const name = document.getElementById(`cfgCustomName_${id}`)?.value || 'Custom Provider';
+      const baseUrl = document.getElementById(`cfgCustomBaseUrl_${id}`)?.value || '';
+      const apiKey = document.getElementById(`cfgCustomKey_${id}`)?.value || '';
+      const model = document.getElementById(`cfgCustomModel_${id}`)?.value || '';
+      const providerType = document.getElementById(`cfgCustomType_${id}`)?.value || 'openai';
+
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.background = "rgba(56, 189, 248, 0.12)";
+        banner.style.border = "1px solid #38bdf8";
+        banner.style.color = "#38bdf8";
+        banner.textContent = `Testing connection to ${name}...`;
+      }
+
+      try {
+        const res = await fetch("/api/settings/providers/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: `custom_${id}`,
+            base_url: baseUrl,
+            api_key: apiKey,
+            model: model,
+            provider_type: providerType
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (banner) {
+            banner.style.background = "rgba(16, 185, 129, 0.15)";
+            banner.style.border = "1px solid #10b981";
+            banner.style.color = "#10b981";
+            banner.textContent = data.message || `Successfully connected to ${name}!`;
+          }
+        } else {
+          if (banner) {
+            banner.style.background = "rgba(239, 68, 68, 0.15)";
+            banner.style.border = "1px solid #ef4444";
+            banner.style.color = "#ef4444";
+            banner.textContent = "Connection test failed: " + (data.error || "Unknown error");
+          }
+        }
+      } catch (err) {
+        if (banner) {
+          banner.style.background = "rgba(239, 68, 68, 0.15)";
+          banner.style.border = "1px solid #ef4444";
+          banner.style.color = "#ef4444";
+          banner.textContent = "Request error: " + err;
+        }
+      }
+    }
+
+    async function probeAndFetchModels(target, customId = null) {
+      const banner = document.getElementById("settingsStatusMsg");
+      let baseUrl = "";
+      let apiKey = "";
+      let protocol = "auto";
+      let modelInputEl = null;
+      let datalistEl = null;
+
+      if (target === 'ollama') {
+        baseUrl = document.getElementById("cfgOllamaUrl")?.value;
+        protocol = "ollama";
+      } else if (target === 'openrouter') {
+        baseUrl = "https://openrouter.ai/api/v1";
+        apiKey = document.getElementById("cfgOpenrouterKey")?.value;
+        protocol = "openai";
+        modelInputEl = document.getElementById("cfgOpenrouterModel");
+        datalistEl = document.getElementById("listOpenrouterModels");
+      } else if (target === 'openai') {
+        baseUrl = document.getElementById("cfgOpenaiBaseUrl")?.value;
+        apiKey = document.getElementById("cfgOpenaiKey")?.value;
+        protocol = "openai";
+        modelInputEl = document.getElementById("cfgOpenaiModel");
+        datalistEl = document.getElementById("listOpenaiModels");
+      } else if (target === 'anthropic') {
+        baseUrl = document.getElementById("cfgAnthropicBaseUrl")?.value;
+        apiKey = document.getElementById("cfgAnthropicKey")?.value;
+        protocol = "anthropic";
+        modelInputEl = document.getElementById("cfgAnthropicModel");
+        datalistEl = document.getElementById("listAnthropicModels");
+      } else if (target === 'custom' && customId) {
+        baseUrl = document.getElementById(`cfgCustomBaseUrl_${customId}`)?.value;
+        apiKey = document.getElementById(`cfgCustomKey_${customId}`)?.value;
+        protocol = document.getElementById(`cfgCustomType_${customId}`)?.value || "auto";
+        modelInputEl = document.getElementById(`cfgCustomModel_${customId}`);
+        datalistEl = document.getElementById(`listCustomModels_${customId}`);
+      }
+
+      if (!baseUrl) {
+        if (banner) {
+          banner.style.display = "block";
+          banner.style.background = "rgba(239, 68, 68, 0.15)";
+          banner.style.border = "1px solid #ef4444";
+          banner.style.color = "#ef4444";
+          banner.textContent = "Please enter a Base URL endpoint first.";
+        }
+        return;
+      }
+
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.background = "rgba(56, 189, 248, 0.12)";
+        banner.style.border = "1px solid #38bdf8";
+        banner.style.color = "#38bdf8";
+        banner.textContent = `Probing ${baseUrl} and auto-fetching models...`;
+      }
+
+      try {
+        const res = await fetch("/api/settings/providers/probe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, protocol })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (banner) {
+            banner.style.background = "rgba(16, 185, 129, 0.15)";
+            banner.style.border = "1px solid #10b981";
+            banner.style.color = "#10b981";
+            banner.textContent = `${data.message} (${data.latency_ms}ms latency)`;
+          }
+          if (data.models && data.models.length > 0) {
+            if (datalistEl) {
+              datalistEl.innerHTML = data.models.map(m => `<option value="${escapeHtml(m)}"></option>`).join("");
+            }
+            if (modelInputEl && (!modelInputEl.value || modelInputEl.value === 'gpt-4o' || modelInputEl.value === 'claude-3-5-sonnet-20241022')) {
+              modelInputEl.value = data.models[0];
+            }
+          }
+        } else {
+          if (banner) {
+            banner.style.background = "rgba(239, 68, 68, 0.15)";
+            banner.style.border = "1px solid #ef4444";
+            banner.style.color = "#ef4444";
+            banner.textContent = `Probe failed: ${data.error || 'Check Base URL or API key.'}`;
+          }
+        }
+      } catch (err) {
+        if (banner) {
+          banner.style.background = "rgba(239, 68, 68, 0.15)";
+          banner.style.border = "1px solid #ef4444";
+          banner.style.color = "#ef4444";
+          banner.textContent = "Probe network error: " + err;
+        }
+      }
+    }
+
     async function loadProviderSettings() {
       try {
         const res = await fetch("/api/settings/providers");
@@ -3880,12 +4453,18 @@
         }
         if (p.anthropic) {
           const en = document.getElementById("cfgAnthropicEnabled");
+          const base = document.getElementById("cfgAnthropicBaseUrl");
           const key = document.getElementById("cfgAnthropicKey");
           const mod = document.getElementById("cfgAnthropicModel");
           if (en) en.checked = !!p.anthropic.enabled;
+          if (base) base.value = p.anthropic.base_url || "https://api.anthropic.com/v1";
           if (key) key.value = p.anthropic.masked_key || "";
           if (mod) mod.value = p.anthropic.model || "claude-3-5-sonnet-20241022";
         }
+
+        // Load custom providers
+        customProvidersList = data.custom_providers || [];
+        renderCustomProviders();
 
         // Also refresh the detected local models pill in the settings modal
         const modelsRes = await fetch("/api/models");
@@ -3904,6 +4483,26 @@
 
     async function saveProviderSettings() {
       const banner = document.getElementById("settingsStatusMsg");
+
+      // Gather custom providers from DOM
+      const gatheredCustom = customProvidersList.map(cp => {
+        const name = document.getElementById(`cfgCustomName_${cp.id}`)?.value || cp.name;
+        const type = document.getElementById(`cfgCustomType_${cp.id}`)?.value || cp.type;
+        const base_url = document.getElementById(`cfgCustomBaseUrl_${cp.id}`)?.value || cp.base_url;
+        const api_key = document.getElementById(`cfgCustomKey_${cp.id}`)?.value || cp.api_key;
+        const model = document.getElementById(`cfgCustomModel_${cp.id}`)?.value || cp.model;
+        const enabled = !!document.getElementById(`cfgCustomEnabled_${cp.id}`)?.checked;
+        return {
+          id: cp.id,
+          name: (name || 'Custom Proxy').trim(),
+          type: (type || 'openai').trim(),
+          base_url: (base_url || '').trim(),
+          api_key: (api_key || '').trim(),
+          model: (model || '').trim(),
+          enabled
+        };
+      });
+
       const payload = {
         providers: {
           ollama: {
@@ -3922,10 +4521,12 @@
           },
           anthropic: {
             enabled: !!document.getElementById("cfgAnthropicEnabled")?.checked,
+            base_url: (document.getElementById("cfgAnthropicBaseUrl")?.value || "https://api.anthropic.com/v1").trim(),
             api_key: (document.getElementById("cfgAnthropicKey")?.value || "").trim(),
             model: (document.getElementById("cfgAnthropicModel")?.value || "claude-3-5-sonnet-20241022").trim()
           }
-        }
+        },
+        custom_providers: gatheredCustom
       };
 
       try {
@@ -3979,6 +4580,7 @@
         payload.api_key = document.getElementById("cfgOpenaiKey")?.value;
         payload.model = document.getElementById("cfgOpenaiModel")?.value;
       } else if (provider === 'anthropic') {
+        payload.base_url = document.getElementById("cfgAnthropicBaseUrl")?.value;
         payload.api_key = document.getElementById("cfgAnthropicKey")?.value;
         payload.model = document.getElementById("cfgAnthropicModel")?.value;
       }
@@ -5631,6 +6233,8 @@
       const layerQueue = [];
       let isPlayingLayer = false;
       let streamHasEnded = false;
+      let hasStreamError = false;
+      let streamErrorMessage = "";
       let lastFinalSec = "0.0";
 
       function queueLayerStep(stepData) {
@@ -5662,11 +6266,22 @@
           lIdx = parseInt(data.step_id.replace("layer", ""), 10) || 1;
         }
 
+        const isStepError = data.status === "error";
+        if (isStepError) {
+          hasStreamError = true;
+          harness.classList.add("failed");
+        }
+
         // 1. Update Layer Pill
         const pillElem = harness.querySelector("#harnessLayerPill");
         if (pillElem) {
-          pillElem.innerText = `Layer ${lIdx}/5`;
-          pillElem.className = `layer-pill layer-${lIdx}`;
+          if (isStepError) {
+            pillElem.innerText = "FAILED";
+            pillElem.className = "layer-pill error";
+          } else {
+            pillElem.innerText = `Layer ${lIdx}/5`;
+            pillElem.className = `layer-pill layer-${lIdx}`;
+          }
         }
 
         // 2. Optical blur transition for Ticker Text
@@ -5675,6 +6290,7 @@
           tickerElem.classList.add("transitioning");
           setTimeout(() => {
             tickerElem.innerText = `${data.label}${data.detail ? ' • ' + data.detail : ''}`;
+            if (isStepError) tickerElem.style.color = "#f87171";
             tickerElem.classList.remove("transitioning");
           }, 180);
         }
@@ -5686,7 +6302,11 @@
             if (s < lIdx) {
               seg.className = "step-segment done";
             } else if (s === lIdx) {
-              seg.className = data.status === "done" && s === 5 ? "step-segment done" : `step-segment active seg-${s}`;
+              if (isStepError) {
+                seg.className = "step-segment error";
+              } else {
+                seg.className = data.status === "done" && s === 5 ? "step-segment done" : `step-segment active seg-${s}`;
+              }
             } else {
               seg.className = "step-segment";
             }
@@ -5697,18 +6317,21 @@
         const stepsBox = harness.querySelector("#harnessSteps");
         if (stepsBox) {
           let stepElem = stepsBox.querySelector(`[data-step-id="${data.step_id}"]`);
+          const stepClass = isStepError ? "harness-step error" : (data.status === "done" ? "harness-step done" : "harness-step active");
           if (!stepElem) {
             stepElem = document.createElement("div");
-            stepElem.className = "harness-step " + (data.status === "done" ? "done" : "active");
+            stepElem.className = stepClass;
             stepElem.dataset.stepId = data.step_id;
             stepsBox.appendChild(stepElem);
           } else {
-            stepElem.className = "harness-step " + (data.status === "done" ? "done" : "active");
+            stepElem.className = stepClass;
           }
-          const iconHtml = data.status === "done"
-            ? `<svg class="icon-xs" style="color: #34d399; flex-shrink: 0;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-            : `<span class="step-pulse-dot"></span>`;
-          const layerPill = data.layer ? `<span class="layer-pill layer-${lIdx}">${escapeHtml(data.layer)}</span>` : '';
+          const iconHtml = isStepError
+            ? `<svg class="icon-xs" style="color: #ef4444; flex-shrink: 0;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`
+            : (data.status === "done"
+              ? `<svg class="icon-xs" style="color: #34d399; flex-shrink: 0;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+              : `<span class="step-pulse-dot"></span>`);
+          const layerPill = data.layer ? `<span class="layer-pill ${isStepError ? 'error' : 'layer-' + lIdx}">${escapeHtml(data.layer)}</span>` : '';
           const detailHtml = data.detail ? ` <span class="layer-desc">(${escapeHtml(data.detail)})</span>` : '';
           stepElem.innerHTML = `${iconHtml} ${layerPill} <span class="layer-name">${escapeHtml(data.label)}</span>${detailHtml}`;
         }
@@ -5726,33 +6349,46 @@
 
         const verbElem = harness.querySelector("#harnessVerb");
         if (verbElem) {
-          verbElem.innerHTML = `Thought for ${lastFinalSec}s`;
+          verbElem.innerHTML = hasStreamError ? `Halted after ${lastFinalSec}s` : `Thought for ${lastFinalSec}s`;
+          if (hasStreamError) verbElem.style.color = "#f87171";
           verbElem.style.opacity = "1";
           verbElem.style.transform = "translateY(0)";
         }
 
         const pillElem = harness.querySelector("#harnessLayerPill");
         if (pillElem) {
-          pillElem.className = "layer-pill completed";
-          pillElem.innerText = "COMPLETED";
+          if (hasStreamError) {
+            pillElem.className = "layer-pill error";
+            pillElem.innerText = "HALTED";
+          } else {
+            pillElem.className = "layer-pill completed";
+            pillElem.innerText = "COMPLETED";
+          }
         }
         const tickerElem = harness.querySelector("#harnessTickerText");
         if (tickerElem) {
-          tickerElem.innerText = "5/5 layers completed & verified";
-        }
-
-        for (let s = 1; s <= 5; s++) {
-          const seg = harness.querySelector(`#seg${s}`);
-          if (seg) seg.className = "step-segment done";
-        }
-
-        const allSteps = harness.querySelectorAll(".harness-step");
-        allSteps.forEach(s => {
-          s.className = "harness-step done";
-          if (!s.querySelector("svg")) {
-            s.innerHTML = `<svg class="icon-xs" style="color: #34d399;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>${s.innerText.trim()}</span>`;
+          if (hasStreamError) {
+            tickerElem.innerText = "Harness interrupted by provider error";
+            tickerElem.style.color = "#fca5a5";
+          } else {
+            tickerElem.innerText = "5/5 layers completed & verified";
           }
-        });
+        }
+
+        if (!hasStreamError) {
+          for (let s = 1; s <= 5; s++) {
+            const seg = harness.querySelector(`#seg${s}`);
+            if (seg) seg.className = "step-segment done";
+          }
+
+          const allSteps = harness.querySelectorAll(".harness-step");
+          allSteps.forEach(s => {
+            s.className = "harness-step done";
+            if (!s.querySelector("svg")) {
+              s.innerHTML = `<svg class="icon-xs" style="color: #34d399;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>${s.innerText.trim()}</span>`;
+            }
+          });
+        }
       }
 
       const finalizeHarness = () => {
@@ -5813,6 +6449,24 @@
                 if (dataStr === "[DONE]") break;
                 try {
                   const data = JSON.parse(dataStr);
+
+                  // Handle Stream / Provider Errors
+                  if (data.type === "error") {
+                    hasStreamError = true;
+                    streamErrorMessage = data.text;
+                    const streamBox = aiRow.querySelector(".claude-stream-content");
+                    if (streamBox) {
+                      streamBox.innerHTML = `
+                        <div class="agent-error-alert" style="margin-top: 10px; padding: 12px 16px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; color: #fca5a5; font-size: 13px; line-height: 1.5;">
+                          <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #ef4444; margin-bottom: 6px;">
+                            <svg style="width: 16px; height: 16px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <span>Provider Error</span>
+                          </div>
+                          <div style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(data.text)}</div>
+                        </div>
+                      `;
+                    }
+                  }
 
                   // Queue 5-Layer Agent Harness Steps
                   if (data.type === "harness_step") {

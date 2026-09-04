@@ -55,6 +55,8 @@ if not os.path.exists(PROVIDER_CONFIG_FILE) and os.path.exists(os.path.expanduse
 
 from tools import TOOLS_SPEC, execute_agent_tool
 
+STANDARD_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
 def default_provider_config():
     return {
         "active_provider": "ollama",
@@ -83,7 +85,8 @@ def default_provider_config():
                 "model": "claude-3-5-sonnet-20241022",
                 "enabled": False
             }
-        }
+        },
+        "custom_providers": []
     }
 
 def load_provider_config() -> dict:
@@ -99,6 +102,7 @@ def load_provider_config() -> dict:
                         d["providers"][p_key].update(p_val)
                     else:
                         d["providers"][p_key] = p_val
+                d["custom_providers"] = data.get("custom_providers", [])
                 return d
         except Exception:
             pass
@@ -1064,11 +1068,18 @@ class TestProviderPayload(BaseModel):
     base_url: Optional[str] = ""
     api_key: Optional[str] = ""
     model: Optional[str] = ""
+    provider_type: Optional[str] = "openai"
+
+class ProbeProviderPayload(BaseModel):
+    base_url: str
+    api_key: Optional[str] = ""
+    protocol: Optional[str] = "auto"
 
 class ProviderUpdatePayload(BaseModel):
     active_provider: Optional[str] = None
     active_model: Optional[str] = None
-    providers: Dict[str, Any]
+    providers: Optional[Dict[str, Any]] = None
+    custom_providers: Optional[List[Dict[str, Any]]] = None
 
 @app.get("/api/models")
 def get_available_models():
@@ -1077,13 +1088,33 @@ def get_available_models():
     local_models = fetch_ollama_models(ollama_url)
 
     cloud_models = []
+    # Built-in cloud providers - only show if enabled AND an API key is configured
     for p_id in ["openrouter", "openai", "anthropic"]:
-        p_data = cfg["providers"].get(p_id, {})
-        if p_data.get("enabled"):
+        p_data = cfg.get("providers", {}).get(p_id, {})
+        has_key = bool((p_data.get("api_key") or "").strip())
+        if p_data.get("enabled") and has_key:
             cloud_models.append({
                 "provider": p_id,
                 "model": p_data.get("model", ""),
-                "name": f"{p_data.get('model', '')} ({p_id.capitalize()})"
+                "name": f"{p_data.get('model', '')} ({p_id.capitalize()})",
+                "category": "cloud"
+            })
+
+    # Custom 3rd-party providers / proxies
+    for cp in cfg.get("custom_providers", []):
+        if cp.get("enabled"):
+            cp_id = cp.get("id", "custom")
+            cp_name = cp.get("name", "Custom Proxy")
+            cp_model = cp.get("model", "")
+            cp_type = cp.get("type", "openai")
+            cloud_models.append({
+                "provider": f"custom_{cp_id}",
+                "model": cp_model,
+                "name": f"{cp_model} ({cp_name})",
+                "category": "custom",
+                "custom_id": cp_id,
+                "custom_name": cp_name,
+                "custom_type": cp_type
             })
 
     return {
@@ -1101,6 +1132,13 @@ def switch_active_model(payload: SwitchModelPayload):
     if payload.provider in cfg["providers"]:
         cfg["providers"][payload.provider]["model"] = payload.model
         cfg["providers"][payload.provider]["enabled"] = True
+    elif payload.provider.startswith("custom_"):
+        c_id = payload.provider[7:]
+        for cp in cfg.get("custom_providers", []):
+            if cp.get("id") == c_id:
+                cp["model"] = payload.model
+                cp["enabled"] = True
+                break
     save_provider_config(cfg)
 
     if payload.provider == "ollama":
@@ -1133,6 +1171,15 @@ def get_provider_settings():
         else:
             p_info["has_key"] = False
             p_info["masked_key"] = ""
+
+    for cp in safe_cfg.get("custom_providers", []):
+        key = cp.get("api_key", "")
+        if key:
+            cp["has_key"] = True
+            cp["masked_key"] = key[:4] + "..." + key[-4:] if len(key) > 8 else "••••••••"
+        else:
+            cp["has_key"] = False
+            cp["masked_key"] = ""
     return safe_cfg
 
 @app.post("/api/settings/providers")
@@ -1143,12 +1190,25 @@ def update_provider_settings(payload: ProviderUpdatePayload):
     if payload.active_model:
         cfg["active_model"] = payload.active_model
 
-    for p_id, incoming in payload.providers.items():
-        if p_id in cfg["providers"]:
-            new_key = incoming.get("api_key", "")
-            if not new_key or "..." in new_key or "•••" in new_key:
-                incoming["api_key"] = cfg["providers"][p_id].get("api_key", "")
-            cfg["providers"][p_id].update(incoming)
+    if payload.providers:
+        for p_id, incoming in payload.providers.items():
+            if p_id in cfg["providers"]:
+                new_key = incoming.get("api_key", "")
+                if not new_key or "..." in new_key or "•••" in new_key:
+                    incoming["api_key"] = cfg["providers"][p_id].get("api_key", "")
+                cfg["providers"][p_id].update(incoming)
+
+    if payload.custom_providers is not None:
+        existing_keys = {cp.get("id"): cp.get("api_key", "") for cp in cfg.get("custom_providers", [])}
+        updated_custom = []
+        for cp in payload.custom_providers:
+            c_id = cp.get("id") or str(uuid.uuid4())[:8]
+            cp["id"] = c_id
+            new_key = cp.get("api_key", "")
+            if (not new_key or "..." in new_key or "•••" in new_key) and c_id in existing_keys:
+                cp["api_key"] = existing_keys[c_id]
+            updated_custom.append(cp)
+        cfg["custom_providers"] = updated_custom
 
     save_provider_config(cfg)
     return {"success": True, "config": cfg}
@@ -1166,12 +1226,41 @@ def test_provider_connection(payload: TestProviderPayload):
             ms = round((time.time() - t0) * 1000)
             return {"success": True, "latency_ms": ms, "message": f"Connected to Ollama ({len(data.get('models', []))} models installed)"}
 
-        elif p_id in ["openai", "openrouter"]:
-            url = payload.base_url.rstrip("/")
+        # Check protocol type
+        p_type = (payload.provider_type or ("anthropic" if p_id == "anthropic" else "openai")).lower()
+        if p_id == "anthropic" or p_type == "anthropic":
+            base = (payload.base_url or "https://api.anthropic.com/v1").rstrip("/")
+            url = f"{base}/messages" if not base.endswith("/messages") else base
+            body = json.dumps({
+                "model": payload.model or "claude-3-5-haiku-20241022",
+                "max_tokens": 5,
+                "messages": [{"role": "user", "content": "hi"}]
+            }).encode("utf-8")
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": payload.api_key or "",
+                "anthropic-version": "2023-06-01",
+                "User-Agent": STANDARD_USER_AGENT,
+                "Accept": "application/json"
+            }
+            if payload.api_key:
+                headers["Authorization"] = f"Bearer {payload.api_key}"
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers=headers
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+            ms = round((time.time() - t0) * 1000)
+            return {"success": True, "latency_ms": ms, "message": f"Successfully connected to Anthropic API ({ms}ms)"}
+
+        else:
+            url = (payload.base_url or "https://api.openai.com/v1").rstrip("/")
             if not url.endswith("/chat/completions"):
                 url = f"{url}/chat/completions"
             body = json.dumps({
-                "model": payload.model or ("gpt-4o-mini" if p_id == "openai" else "openai/gpt-4o-mini"),
+                "model": payload.model or ("gpt-4o-mini" if p_id == "openai" else (payload.model or "gpt-4o-mini")),
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 5
             }).encode("utf-8")
@@ -1180,7 +1269,10 @@ def test_provider_connection(payload: TestProviderPayload):
                 data=body,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {payload.api_key}"
+                    "Authorization": f"Bearer {payload.api_key}",
+                    "x-api-key": payload.api_key or "",
+                    "User-Agent": STANDARD_USER_AGENT,
+                    "Accept": "application/json"
                 }
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -1188,35 +1280,221 @@ def test_provider_connection(payload: TestProviderPayload):
             ms = round((time.time() - t0) * 1000)
             return {"success": True, "latency_ms": ms, "message": f"Successfully connected to {p_id.capitalize()} ({ms}ms)"}
 
-        elif p_id == "anthropic":
-            url = "https://api.anthropic.com/v1/messages"
-            body = json.dumps({
-                "model": payload.model or "claude-3-5-haiku-20241022",
-                "max_tokens": 5,
-                "messages": [{"role": "user", "content": "hi"}]
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": payload.api_key,
-                    "anthropic-version": "2023-06-01"
-                }
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                resp.read()
-            ms = round((time.time() - t0) * 1000)
-            return {"success": True, "latency_ms": ms, "message": f"Successfully connected to Anthropic Claude ({ms}ms)"}
-
-        return {"error": f"Unknown provider: {p_id}"}
+    except urllib.error.HTTPError as he:
+        try:
+            raw_body = he.read().decode("utf-8", errors="ignore")
+            try:
+                err_data = json.loads(raw_body)
+                err_msg = err_data.get("error", {}).get("message") or err_data.get("message") or raw_body[:250]
+            except Exception:
+                err_msg = raw_body[:250] or f"HTTP {he.code}: {he.reason}"
+        except Exception:
+            err_msg = f"HTTP {he.code}: {he.reason}"
+        return {"error": err_msg}
     except Exception as e:
         return {"error": str(e)}
 
-def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict):
-    p_info = cfg.get("providers", {}).get(provider, {})
+@app.post("/api/settings/providers/probe")
+def probe_provider_endpoint(payload: ProbeProviderPayload):
+    raw_url = (payload.base_url or "").strip().rstrip("/")
+    if not raw_url:
+        return {"success": False, "error": "Base URL cannot be empty."}
 
-    if provider == "ollama":
+    api_key = (payload.api_key or "").strip()
+    protocol = (payload.protocol or "auto").lower()
+    t0 = time.time()
+
+    # 1. Test Ollama
+    if protocol in ["auto", "ollama"] or ":11434" in raw_url:
+        try:
+            req = urllib.request.Request(f"{raw_url}/api/tags", headers={"User-Agent": "VexP-IDE"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+                ms = round((time.time() - t0) * 1000)
+                return {
+                    "success": True,
+                    "protocol": "ollama",
+                    "latency_ms": ms,
+                    "models": models,
+                    "message": f"Connected to Ollama! Found {len(models)} local models."
+                }
+        except Exception:
+            if protocol == "ollama":
+                return {"success": False, "error": f"Could not connect to Ollama on {raw_url}"}
+
+    # 2. Test OpenAI-compatible models endpoint
+    if protocol in ["auto", "openai"]:
+        candidate_urls = []
+        if raw_url.endswith("/v1"):
+            candidate_urls.append(f"{raw_url}/models")
+            candidate_urls.append(f"{raw_url.rsplit('/v1', 1)[0]}/models")
+        elif raw_url.endswith("/chat/completions"):
+            candidate_urls.append(f"{raw_url.rsplit('/chat/completions', 1)[0]}/models")
+        else:
+            candidate_urls.append(f"{raw_url}/v1/models")
+            candidate_urls.append(f"{raw_url}/models")
+
+        headers = {"User-Agent": STANDARD_USER_AGENT, "Accept": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+            headers["x-api-key"] = api_key
+
+        for m_url in candidate_urls:
+            try:
+                req = urllib.request.Request(m_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    models_list = []
+                    if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+                        models_list = [item.get("id") for item in data["data"] if isinstance(item, dict) and "id" in item]
+                    elif isinstance(data, list):
+                        models_list = [item.get("id") or item.get("name") for item in data if isinstance(item, dict)]
+
+                    if models_list:
+                        ms = round((time.time() - t0) * 1000)
+                        clean_base = m_url.rsplit("/models", 1)[0]
+                        return {
+                            "success": True,
+                            "protocol": "openai",
+                            "base_url": clean_base,
+                            "latency_ms": ms,
+                            "models": models_list[:150],
+                            "message": f"Connected! Found {len(models_list)} models available."
+                        }
+            except urllib.error.HTTPError as he:
+                if he.code == 401:
+                    return {"success": False, "error": "Authentication failed (HTTP 401). Please check your API key."}
+            except Exception:
+                pass
+
+        # Fallback test: ping /chat/completions with minimal payload
+        chat_url = f"{raw_url}/chat/completions" if raw_url.endswith("/v1") else (
+            f"{raw_url}/v1/chat/completions" if not raw_url.endswith("/chat/completions") else raw_url
+        )
+        try:
+            body = json.dumps({
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                chat_url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                    "x-api-key": api_key,
+                    "User-Agent": STANDARD_USER_AGENT,
+                    "Accept": "application/json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                resp.read()
+            ms = round((time.time() - t0) * 1000)
+            return {
+                "success": True,
+                "protocol": "openai",
+                "latency_ms": ms,
+                "models": [],
+                "message": f"Connected to OpenAI-compatible endpoint ({ms}ms)!"
+            }
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            if he.code in [400, 404] and ("model" in err_body.lower() or "not found" in err_body.lower() or "tokens" in err_body.lower()):
+                ms = round((time.time() - t0) * 1000)
+                return {
+                    "success": True,
+                    "protocol": "openai",
+                    "latency_ms": ms,
+                    "models": [],
+                    "message": f"Endpoint verified ({ms}ms)!"
+                }
+            elif he.code == 401:
+                return {"success": False, "error": "Authentication failed (HTTP 401). Invalid API key."}
+        except Exception:
+            pass
+
+    # 3. Test Anthropic protocol
+    if protocol in ["auto", "anthropic"] or "anthropic" in raw_url:
+        anth_url = f"{raw_url}/messages" if raw_url.endswith("/v1") else (
+            f"{raw_url}/v1/messages" if not raw_url.endswith("/messages") else raw_url
+        )
+        try:
+            body = json.dumps({
+                "model": "claude-3-5-haiku-20241022",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1
+            }).encode("utf-8")
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "anthropic-version": "2023-06-01",
+                "User-Agent": STANDARD_USER_AGENT,
+                "Accept": "application/json"
+            }
+            req = urllib.request.Request(anth_url, data=body, headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                resp.read()
+            ms = round((time.time() - t0) * 1000)
+            return {
+                "success": True,
+                "protocol": "anthropic",
+                "latency_ms": ms,
+                "models": [
+                    "claude-sonnet-4-6",
+                    "claude-opus-4-6",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229"
+                ],
+                "message": f"Connected to Anthropic-compatible provider ({ms}ms)!"
+            }
+        except urllib.error.HTTPError as he:
+            if he.code == 401:
+                return {"success": False, "error": "Invalid Anthropic API key (HTTP 401)."}
+            elif he.code in [400, 404]:
+                ms = round((time.time() - t0) * 1000)
+                return {
+                    "success": True,
+                    "protocol": "anthropic",
+                    "latency_ms": ms,
+                    "models": [
+                        "claude-sonnet-4-6",
+                        "claude-opus-4-6",
+                        "claude-3-5-sonnet-20241022",
+                        "claude-3-5-haiku-20241022"
+                    ],
+                    "message": f"Anthropic-compatible endpoint reachable ({ms}ms)."
+                }
+        except Exception as e:
+            if protocol == "anthropic":
+                return {"success": False, "error": f"Anthropic error: {str(e)}"}
+
+    return {
+        "success": False,
+        "error": "Could not connect to provider. Verify the Base URL and API key."
+    }
+
+def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict):
+    custom_profile = None
+    if provider.startswith("custom_"):
+        c_id = provider[7:]
+        for cp in cfg.get("custom_providers", []):
+            if cp.get("id") == c_id:
+                custom_profile = cp
+                break
+        if not custom_profile:
+            yield ("error", f"Custom provider '{provider}' not found in configuration")
+            return
+        p_info = custom_profile
+        effective_provider = custom_profile.get("type", "openai")
+    else:
+        p_info = cfg.get("providers", {}).get(provider, {})
+        effective_provider = provider
+
+    if effective_provider == "ollama":
         base_url = p_info.get("base_url", "http://127.0.0.1:11434").rstrip("/")
         payload = {
             "model": model,
@@ -1256,7 +1534,7 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
         except Exception as err:
             yield ("error", str(err))
 
-    elif provider in ["openai", "openrouter"]:
+    elif effective_provider in ["openai", "openrouter"]:
         base_url = p_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
         endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
         payload = {
@@ -1265,11 +1543,15 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
             "tools": tools,
             "stream": True
         }
+        api_key = p_info.get('api_key', '')
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {p_info.get('api_key', '')}"
+            "Authorization": f"Bearer {api_key}",
+            "x-api-key": api_key,
+            "User-Agent": STANDARD_USER_AGENT,
+            "Accept": "text/event-stream, application/json"
         }
-        if provider == "openrouter":
+        if effective_provider == "openrouter":
             headers["HTTP-Referer"] = "https://github.com/vexp/claude-code-ide"
             headers["X-Title"] = "VexP Code IDE"
 
@@ -1329,11 +1611,25 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                 yield ("tool_call", tc)
 
             yield ("done", {"content": accumulated_text, "tool_calls": final_tool_calls})
+        except urllib.error.HTTPError as he:
+            err_msg = str(he)
+            try:
+                raw_body = he.read().decode("utf-8", errors="ignore")
+                if raw_body:
+                    try:
+                        err_json = json.loads(raw_body)
+                        err_msg = err_json.get("error", {}).get("message") or err_json.get("message") or raw_body[:250]
+                    except:
+                        err_msg = raw_body[:250]
+            except:
+                pass
+            yield ("error", f"Provider HTTP {he.code} Error: {err_msg}")
         except Exception as err:
             yield ("error", str(err))
 
-    elif provider == "anthropic":
-        endpoint = "https://api.anthropic.com/v1/messages"
+    elif effective_provider == "anthropic":
+        base_url = p_info.get("base_url", "https://api.anthropic.com/v1").rstrip("/")
+        endpoint = f"{base_url}/messages" if not base_url.endswith("/messages") else base_url
         system_content = ""
         anth_msgs = []
         for m in messages:
@@ -1370,11 +1666,16 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
         if anth_tools:
             payload["tools"] = anth_tools
 
+        api_key = p_info.get("api_key", "")
         headers = {
             "Content-Type": "application/json",
-            "x-api-key": p_info.get("api_key", ""),
-            "anthropic-version": "2023-06-01"
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "User-Agent": STANDARD_USER_AGENT,
+            "Accept": "text/event-stream, application/json"
         }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         accumulated_text = ""
         current_tool_id = ""
         current_tool_name = ""
@@ -1435,6 +1736,19 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                         break
 
             yield ("done", {"content": accumulated_text, "tool_calls": final_tool_calls})
+        except urllib.error.HTTPError as he:
+            err_msg = str(he)
+            try:
+                raw_body = he.read().decode("utf-8", errors="ignore")
+                if raw_body:
+                    try:
+                        err_json = json.loads(raw_body)
+                        err_msg = err_json.get("error", {}).get("message") or err_json.get("message") or raw_body[:250]
+                    except:
+                        err_msg = raw_body[:250]
+            except:
+                pass
+            yield ("error", f"Provider HTTP {he.code} Error: {err_msg}")
         except Exception as err:
             yield ("error", str(err))
 
@@ -1656,7 +1970,13 @@ CRITICAL RULES:
                             turn_tool_calls = payload["tool_calls"]
 
             if turn_error:
-                yield f"data: {json.dumps({'type': 'error', 'text': f'Agent Harness Loop error ({active_provider}:{active_model}): {turn_error}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'error', 'label': 'Intent Deliberation & Strategy', 'detail': f'Provider synthesis halted: {turn_error[:70]}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'error', 'label': 'Solution Synthesis & Delivery', 'detail': f'{turn_error[:70]}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'text': f'AI Provider Error ({active_provider}:{active_model}): {turn_error}'})}\n\n"
+                try:
+                    append_to_session(req.session_id, "assistant", f"⚠️ **AI Provider Error**: {turn_error}", workspace=target_ws, thinking_seconds=round(time.time() - start_time, 1))
+                except Exception:
+                    pass
                 break
 
             if turn_tool_calls:
