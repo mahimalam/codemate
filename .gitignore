@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# IDE Runtime & Session Data
+*.log
+.claude_code_ide/
+storage/
+ai_memory.json
+chat_history.json
+active_workspace.json
+recent_workspaces.json
+provider_config.json
+
+# Environment secrets
+.env
+.env.local
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+
+# Graphify
+graphify-out/
