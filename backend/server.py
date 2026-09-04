@@ -583,8 +583,16 @@ def git_push_endpoint(payload: GitRemotePayload):
         branch = payload.branch
         if not branch:
             branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip() or "main"
-        cmd = ["git", "push", "-u", payload.remote or "origin", branch]
+        
+        remote = payload.remote or "origin"
+        cmd = ["git", "push", "-u", remote, branch]
         res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+        
+        # Handle non-fast-forward: pull rebase and push again
+        if res.returncode != 0 and "rejected" in res.stderr.lower():
+            subprocess.run(["git", "pull", "--rebase", remote, branch], capture_output=True, text=True, cwd=target_dir)
+            res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+
         raw_out = res.stdout.strip() or res.stderr.strip()
         clean_out = re.sub(r'https://[^@]+@', 'https://', raw_out)
 
@@ -805,19 +813,32 @@ def git_get_config_endpoint(path: Optional[str] = Query(None)):
         email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
         if not email:
             email = subprocess.run(["git", "config", "--global", "user.email"], capture_output=True, text=True).stdout.strip()
-        
+
         raw_remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
         clean_remote = re.sub(r'https://[^@]+@github\.com', 'https://github.com', raw_remote)
-        has_token = "@github.com" in raw_remote
+
+        # Extract token embedded in the remote URL so the modal can repopulate the PAT field
+        saved_token = ""
+        m = re.search(r'https://(?:[^:]+):([^@]+)@github\.com', raw_remote)
+        if not m:
+            m = re.search(r'https://([^@]+)@github\.com', raw_remote)
+        if m:
+            candidate = m.group(1)
+            # Only treat it as a token if it looks like a PAT (starts with ghp_ or github_pat_ or is long)
+            if candidate.startswith(("ghp_", "github_pat_")) or len(candidate) > 20:
+                saved_token = candidate
+
+        has_token = bool(saved_token)
 
         return {
             "username": name,
             "email": email,
             "remote_url": clean_remote,
-            "has_token": has_token
+            "has_token": has_token,
+            "saved_token": saved_token
         }
     except Exception as e:
-        return {"username": "", "email": "", "remote_url": "", "has_token": False, "error": str(e)}
+        return {"username": "", "email": "", "remote_url": "", "has_token": False, "saved_token": "", "error": str(e)}
 
 @app.post("/api/git/config")
 def git_set_config_endpoint(payload: GitConfigPayload):

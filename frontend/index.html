@@ -5700,16 +5700,26 @@
         const path = currentWorkspace ? currentWorkspace.current_path : "";
         const res = await fetch(`/api/git/config?path=${encodeURIComponent(path)}`);
         const cfg = await res.json();
-        
+
         const urlInput = document.getElementById("gitModalRemoteUrl");
+        const patInput = document.getElementById("gitModalPatToken");
         const userInput = document.getElementById("gitModalUsername");
         const emailInput = document.getElementById("gitModalEmail");
         const removeBtn = document.getElementById("btnRemoveRemote");
-        
+
         if (urlInput && cfg.remote_url) urlInput.value = cfg.remote_url;
         if (userInput && cfg.username) userInput.value = cfg.username;
         if (emailInput && cfg.email) emailInput.value = cfg.email;
-        
+
+        // Repopulate PAT field — token is stored in the git remote URL
+        if (patInput) {
+          if (cfg.saved_token) {
+            patInput.value = cfg.saved_token;
+          } else if (cfg.has_token) {
+            patInput.placeholder = "Token saved in remote URL (enter new to replace)";
+          }
+        }
+
         if (removeBtn) {
           removeBtn.style.display = cfg.remote_url ? "inline-flex" : "none";
         }
