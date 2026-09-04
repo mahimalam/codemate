@@ -7,10 +7,17 @@ import uuid
 import threading
 import subprocess
 import urllib.request
+import pty
+import fcntl
+import termios
+import struct
+import signal
+import asyncio
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Query
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 try:
@@ -34,6 +41,10 @@ sys.path.insert(0, BASE_DIR)
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 INDEX_HTML_PATH = os.path.join(FRONTEND_DIR, "index.html")
+
+VENDOR_DIR = os.path.join(FRONTEND_DIR, "vendor")
+if os.path.exists(VENDOR_DIR):
+    app.mount("/vendor", StaticFiles(directory=VENDOR_DIR), name="vendor")
 
 # ── User config directory (never committed to git) ─────────────────────────
 CONFIG_DIR = os.path.expanduser("~/.claude_code_ide")
@@ -898,7 +909,116 @@ def write_file(payload: WriteFilePayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ---------------------------------------------------------------------
-# Command Execution (Terminal Output Drawer)
+# Interactive Terminal (WebSocket + PTY like VS Code / Cursor)
+# ---------------------------------------------------------------------
+@app.websocket("/ws/terminal")
+async def terminal_websocket_endpoint(websocket: WebSocket, cwd: Optional[str] = Query(None)):
+    await websocket.accept()
+
+    work_dir = cwd or get_active_workspace()
+    if not os.path.exists(work_dir) or not os.path.isdir(work_dir):
+        work_dir = os.path.expanduser("~")
+
+    master_fd, slave_fd = pty.openpty()
+    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+    shell = os.environ.get("SHELL", "/bin/bash")
+    env = dict(os.environ)
+    env["TERM"] = "xterm-256color"
+    env["COLORTERM"] = "truecolor"
+
+    pid = os.fork()
+    if pid == 0:
+        os.close(master_fd)
+        os.setsid()
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        os.close(slave_fd)
+        try:
+            os.chdir(work_dir)
+        except Exception:
+            pass
+        try:
+            os.execvpe(shell, [shell], env)
+        except Exception:
+            os.execvpe("/bin/sh", ["/bin/sh"], env)
+        os._exit(1)
+
+    os.close(slave_fd)
+
+    loop = asyncio.get_running_loop()
+    output_queue = asyncio.Queue()
+
+    def on_master_readable():
+        try:
+            data = os.read(master_fd, 4096)
+            if data:
+                output_queue.put_nowait(data)
+        except Exception:
+            pass
+
+    loop.add_reader(master_fd, on_master_readable)
+
+    async def send_to_client():
+        try:
+            while True:
+                data = await output_queue.get()
+                await websocket.send_bytes(data)
+        except Exception:
+            pass
+
+    async def receive_from_client():
+        try:
+            while True:
+                msg = await websocket.receive()
+                if "bytes" in msg and msg["bytes"]:
+                    os.write(master_fd, msg["bytes"])
+                elif "text" in msg and msg["text"]:
+                    text = msg["text"]
+                    if text.startswith("{"):
+                        try:
+                            ctrl = json.loads(text)
+                            if ctrl.get("type") == "resize":
+                                rows = int(ctrl.get("rows", 24))
+                                cols = int(ctrl.get("cols", 80))
+                                winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                                fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                                continue
+                        except Exception:
+                            pass
+                    os.write(master_fd, text.encode("utf-8"))
+        except (WebSocketDisconnect, Exception):
+            pass
+
+    sender_task = asyncio.create_task(send_to_client())
+    receiver_task = asyncio.create_task(receive_from_client())
+
+    done, pending = await asyncio.wait(
+        [sender_task, receiver_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+    for t in pending:
+        t.cancel()
+
+    try:
+        loop.remove_reader(master_fd)
+    except Exception:
+        pass
+    try:
+        os.close(master_fd)
+    except Exception:
+        pass
+    try:
+        os.kill(pid, signal.SIGTERM)
+        await asyncio.sleep(0.05)
+        os.waitpid(pid, os.WNOHANG)
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------
+# Command Execution (Fallback / Output Drawer)
 # ---------------------------------------------------------------------
 class ExecuteRequest(BaseModel):
     command: str

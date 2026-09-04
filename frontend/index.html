@@ -12,6 +12,11 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+  
+  <!-- xterm.js terminal emulator -->
+  <link rel="stylesheet" href="/vendor/xterm/xterm.css">
+  <script src="/vendor/xterm/xterm.js"></script>
+  <script src="/vendor/xterm/addon-fit.js"></script>
 
   <style>
     :root {
@@ -1219,13 +1224,14 @@
 
     /* Bottom Terminal Panel */
     .terminal-panel {
-      height: 180px;
+      height: 220px;
       background: #181818;
       border-top: 1px solid var(--ide-border);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
       transition: height 0.2s ease;
+      position: relative;
     }
     .terminal-panel.collapsed { height: 30px !important; }
     .terminal-header {
@@ -1236,7 +1242,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      cursor: pointer;
+      user-select: none;
     }
     .terminal-tabs {
       display: flex;
@@ -1254,9 +1260,60 @@
       gap: 5px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      padding: 0 4px;
+      height: 100%;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
     }
-    .terminal-tab-item.active { color: #ffffff; }
-    .term-actions { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
+    .terminal-tab-item:hover { color: #e5e5e5; }
+    .terminal-tab-item.active {
+      color: #ffffff;
+      border-bottom-color: var(--ide-blue);
+    }
+    .term-actions { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
+    .term-btn-action {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .term-btn-action:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+    }
+    .term-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+      transition: background 0.2s ease;
+    }
+
+    #terminalXtermContainer {
+      flex: 1;
+      width: 100%;
+      height: calc(100% - 30px);
+      padding: 4px 6px;
+      box-sizing: border-box;
+      overflow: hidden;
+      background: #181818;
+    }
+    #terminalXtermContainer .xterm {
+      height: 100%;
+      padding: 0;
+    }
+    #terminalXtermContainer .xterm-viewport {
+      overflow-y: auto !important;
+    }
 
     .terminal-output-area {
       flex: 1;
@@ -1267,25 +1324,7 @@
       line-height: 1.5;
       color: #cccccc;
       background: #181818;
-    }
-    .terminal-input-bar {
-      height: 32px;
-      background: #141414;
-      border-top: 1px solid var(--ide-border-subtle);
-      display: flex;
-      align-items: center;
-      padding: 0 10px;
-      gap: 8px;
-    }
-    .term-prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ide-accent); }
-    .terminal-cmd-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: #ffffff;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      outline: none;
+      height: calc(100% - 30px);
     }
 
     /* 6. Right VexP Code AI Panel (380px) */
@@ -2883,25 +2922,31 @@
 
       <!-- Bottom Terminal Panel -->
       <div class="terminal-panel" id="terminalPanel">
-        <div class="terminal-header" onclick="toggleTerminal()">
+        <div class="terminal-header">
           <div class="terminal-tabs">
-            <div class="terminal-tab-item active">
+            <div class="terminal-tab-item active" id="termTabBash" onclick="switchTermTab('bash')">
               <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-              <span>Terminal</span>
+              <span>Terminal (bash)</span>
             </div>
-            <div class="terminal-tab-item" onclick="event.stopPropagation(); appendTermOutput('\n[VexP IDE] Log cleared.\n');">
+            <div class="terminal-tab-item" id="termTabOutput" onclick="switchTermTab('output')">
               <span>Output</span>
             </div>
           </div>
           <div class="term-actions">
-            <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            <button class="term-btn-action" onclick="reconnectTerminal()" title="Restart / Reconnect Shell">
+              <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <span>Restart</span>
+            </button>
+            <button class="term-btn-action" onclick="clearActiveTerminal()" title="Clear Terminal Screen">
+              <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <span>Clear</span>
+            </button>
+            <div class="term-status-dot" id="termStatusIndicator" title="Terminal: Connected"></div>
+            <svg class="icon-sm" viewBox="0 0 24 24" onclick="toggleTerminal()" style="cursor:pointer;" title="Minimize / Expand Terminal"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </div>
         </div>
-        <div class="terminal-output-area" id="terminalOutput">VexP Code Integrated Terminal Ready.</div>
-        <div class="terminal-input-bar">
-          <span class="term-prompt-text" id="termPromptBadge">MatchIQ_MultiLeague $</span>
-          <input type="text" class="terminal-cmd-input" id="terminalInput" placeholder="run command (e.g. pytest, git status, python3)..." onkeydown="handleTermKey(event)">
-        </div>
+        <div id="terminalXtermContainer"></div>
+        <div class="terminal-output-area" id="terminalOutput" style="display: none;">VexP Code Integrated Output Ready.</div>
       </div>
     </main>
 
@@ -3518,7 +3563,15 @@
       const term = document.getElementById("terminalPanel");
       if (term.classList.contains("collapsed") || term.offsetHeight <= 35) {
         term.classList.remove("collapsed");
-        term.style.height = "180px";
+        term.style.height = "220px";
+        if (!xtermInstance) {
+          initXterm();
+        } else if (xtermFitAddon) {
+          setTimeout(() => {
+            try { xtermFitAddon.fit(); } catch(e) {}
+            xtermInstance.focus();
+          }, 100);
+        }
       } else {
         term.classList.add("collapsed");
         term.style.height = "30px";
@@ -5934,45 +5987,245 @@
       }
     }
 
-    // Terminal Commands
-    function appendTermOutput(text) {
-      const out = document.getElementById("terminalOutput");
-      out.textContent += text + "\n";
-      out.scrollTop = out.scrollHeight;
+    // =========================================================================
+    // Interactive Terminal (xterm.js + Linux PTY WebSocket)
+    // =========================================================================
+    let xtermInstance = null;
+    let xtermFitAddon = null;
+    let termSocket = null;
+    let activeTermTab = 'bash';
+
+    function switchTermTab(tab) {
+      activeTermTab = tab;
+      const tabBash = document.getElementById("termTabBash");
+      const tabOutput = document.getElementById("termTabOutput");
+      const xtermBox = document.getElementById("terminalXtermContainer");
+      const outputBox = document.getElementById("terminalOutput");
+
+      if (tab === 'bash') {
+        if (tabBash) tabBash.classList.add("active");
+        if (tabOutput) tabOutput.classList.remove("active");
+        if (xtermBox) xtermBox.style.display = "block";
+        if (outputBox) outputBox.style.display = "none";
+        if (xtermFitAddon && xtermInstance) {
+          setTimeout(() => {
+            try { xtermFitAddon.fit(); } catch(e) {}
+            xtermInstance.focus();
+          }, 50);
+        }
+      } else {
+        if (tabBash) tabBash.classList.remove("active");
+        if (tabOutput) tabOutput.classList.add("active");
+        if (xtermBox) xtermBox.style.display = "none";
+        if (outputBox) outputBox.style.display = "block";
+      }
     }
 
-    async function handleTermKey(e) {
-      if (e.key === "Enter") {
-        const input = document.getElementById("terminalInput");
-        const cmd = input.value.trim();
-        if (!cmd) return;
-        input.value = "";
-        appendTermOutput(`$ ${cmd}`);
+    function appendTermOutput(text) {
+      const out = document.getElementById("terminalOutput");
+      if (out) {
+        out.textContent += text + "\n";
+        out.scrollTop = out.scrollHeight;
+      }
+    }
 
-        try {
-          const res = await fetch("/api/execute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ command: cmd, cwd: currentWorkspace.current_path })
-          });
-          const data = await res.json();
-          appendTermOutput(data.output);
-          loadGitStatus();
-        } catch (err) {
-          appendTermOutput("Execution error: " + err);
+    function clearActiveTerminal() {
+      if (activeTermTab === 'bash') {
+        if (xtermInstance) xtermInstance.clear();
+      } else {
+        const out = document.getElementById("terminalOutput");
+        if (out) out.textContent = "[VexP IDE] Output buffer cleared.\n";
+      }
+    }
+
+    function initXterm() {
+      if (xtermInstance) return;
+      const container = document.getElementById("terminalXtermContainer");
+      if (!container || typeof Terminal === "undefined") {
+        console.warn("xterm.js not loaded or container not found");
+        return;
+      }
+
+      xtermInstance = new Terminal({
+        theme: {
+          background: '#181818',
+          foreground: '#d4d4d4',
+          cursor: '#38bdf8',
+          cursorAccent: '#181818',
+          selectionBackground: '#264f78',
+          black: '#1e1e1e',
+          red: '#f87171',
+          green: '#4ade80',
+          yellow: '#facc15',
+          blue: '#60a5fa',
+          magenta: '#c084fc',
+          cyan: '#38bdf8',
+          white: '#e5e7eb',
+          brightBlack: '#6b7280',
+          brightRed: '#ef4444',
+          brightGreen: '#22c55e',
+          brightYellow: '#eab308',
+          brightBlue: '#3b82f6',
+          brightMagenta: '#a855f7',
+          brightCyan: '#06b6d4',
+          brightWhite: '#ffffff'
+        },
+        fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+        fontSize: 13,
+        lineHeight: 1.25,
+        cursorBlink: true,
+        cursorStyle: 'block',
+        convertEol: true,
+        allowProposedApi: true
+      });
+
+      if (typeof FitAddon !== "undefined" && FitAddon.FitAddon) {
+        xtermFitAddon = new FitAddon.FitAddon();
+        xtermInstance.loadAddon(xtermFitAddon);
+      }
+
+      xtermInstance.open(container);
+
+      setTimeout(() => {
+        if (xtermFitAddon) {
+          try { xtermFitAddon.fit(); } catch(e) {}
         }
+      }, 100);
+
+      connectTermSocket();
+
+      xtermInstance.onData(data => {
+        if (termSocket && termSocket.readyState === WebSocket.OPEN) {
+          termSocket.send(data);
+        }
+      });
+
+      xtermInstance.onResize(size => {
+        if (termSocket && termSocket.readyState === WebSocket.OPEN) {
+          termSocket.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+        }
+      });
+
+      const panel = document.getElementById("terminalPanel");
+      if (panel && window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+          if (activeTermTab === 'bash' && xtermFitAddon && xtermInstance && !panel.classList.contains("collapsed")) {
+            try { xtermFitAddon.fit(); } catch(e) {}
+          }
+        });
+        ro.observe(panel);
+      }
+    }
+
+    function connectTermSocket() {
+      if (termSocket) {
+        try {
+          termSocket.onclose = null;
+          termSocket.onerror = null;
+          termSocket.close();
+        } catch(e) {}
+        termSocket = null;
+      }
+
+      const indicator = document.getElementById("termStatusIndicator");
+      if (indicator) {
+        indicator.style.background = "#f59e0b";
+        indicator.title = "Terminal: Connecting...";
+      }
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const cwd = (currentWorkspace && currentWorkspace.current_path) ? encodeURIComponent(currentWorkspace.current_path) : "";
+      const wsUrl = `${protocol}//${window.location.host}/ws/terminal?cwd=${cwd}`;
+
+      try {
+        termSocket = new WebSocket(wsUrl);
+        termSocket.binaryType = "arraybuffer";
+
+        termSocket.onopen = () => {
+          if (indicator) {
+            indicator.style.background = "#10b981";
+            indicator.title = "Terminal: Connected";
+          }
+          if (xtermFitAddon && xtermInstance) {
+            try {
+              xtermFitAddon.fit();
+              termSocket.send(JSON.stringify({ type: "resize", cols: xtermInstance.cols, rows: xtermInstance.rows }));
+            } catch(e) {}
+          }
+        };
+
+        termSocket.onmessage = (event) => {
+          if (xtermInstance) {
+            if (event.data instanceof ArrayBuffer) {
+              xtermInstance.write(new Uint8Array(event.data));
+            } else {
+              xtermInstance.write(event.data);
+            }
+          }
+        };
+
+        termSocket.onerror = (err) => {
+          console.error("Terminal WebSocket error:", err);
+          if (indicator) {
+            indicator.style.background = "#ef4444";
+            indicator.title = "Terminal: Connection Error";
+          }
+        };
+
+        termSocket.onclose = () => {
+          if (indicator) {
+            indicator.style.background = "#6b7280";
+            indicator.title = "Terminal: Disconnected";
+          }
+          if (xtermInstance) {
+            xtermInstance.write("\r\n\x1b[33m[Process completed. Click 'Restart' to launch a new shell.]\x1b[0m\r\n");
+          }
+        };
+      } catch (err) {
+        console.error("Failed to create WebSocket:", err);
+        if (indicator) {
+          indicator.style.background = "#ef4444";
+          indicator.title = "Terminal: Failed to connect";
+        }
+      }
+    }
+
+    function reconnectTerminal() {
+      if (xtermInstance) {
+        xtermInstance.clear();
+      }
+      connectTermSocket();
+      switchTermTab('bash');
+    }
+
+    function sendCommandToTerminal(cmd) {
+      if (!xtermInstance) {
+        initXterm();
+      }
+      switchTermTab('bash');
+      const panel = document.getElementById("terminalPanel");
+      if (panel && panel.classList.contains("collapsed")) {
+        toggleTerminal();
+      }
+
+      if (termSocket && termSocket.readyState === WebSocket.OPEN) {
+        termSocket.send(cmd + "\n");
+      } else {
+        reconnectTerminal();
+        setTimeout(() => {
+          if (termSocket && termSocket.readyState === WebSocket.OPEN) {
+            termSocket.send(cmd + "\n");
+          }
+        }, 500);
       }
     }
 
     function runActivePythonFile() {
       closeAllMenus();
       if (activeFile.path && activeFile.path.endsWith(".py")) {
-        const panel = document.getElementById("terminalPanel");
-        panel.classList.remove("collapsed");
-        document.getElementById("terminalInput").value = `python3 ${activeFile.path}`;
-        handleTermKey({ key: "Enter" });
+        sendCommandToTerminal(`python3 "${activeFile.path}"`);
       } else {
-        alert("Please open a python file to run.");
+        alert("Please open a Python (.py) file to run.");
       }
     }
 
@@ -6774,6 +7027,7 @@
     window.addEventListener("DOMContentLoaded", () => {
       upgradeExistingUserMessages();
       fetchSessionsList();
+      setTimeout(initXterm, 250);
     });
     setTimeout(() => {
       upgradeExistingUserMessages();
