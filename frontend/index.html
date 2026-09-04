@@ -49,7 +49,7 @@
     }
 
     /* Universal Crisp SVG Icon Engine */
-    svg, .icon, .icon-lg, .icon-sm, .icon-xs {
+    svg, .icon, .icon-lg, .icon-sm, .icon-xs, .icon-xxs {
       fill: none !important;
       stroke: currentColor !important;
       stroke-width: 1.6;
@@ -63,6 +63,20 @@
     .icon-lg { width: 21px; height: 21px; stroke-width: 1.6; }
     .icon-sm { width: 15px; height: 15px; stroke-width: 1.6; }
     .icon-xs { width: 13px; height: 13px; stroke-width: 1.6; }
+    .icon-xxs { width: 11px; height: 11px; stroke-width: 1.6; }
+    .octocat-icon {
+      width: 13px !important;
+      height: 13px !important;
+      min-width: 13px !important;
+      min-height: 13px !important;
+      max-width: 13px !important;
+      max-height: 13px !important;
+      fill: currentColor !important;
+      stroke: none !important;
+      display: inline-block !important;
+      vertical-align: middle !important;
+      flex-shrink: 0;
+    }
 
     /* 1. Top Window Menu Bar */
     .titlebar {
@@ -746,53 +760,80 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 12px;
+      padding: 7px 12px;
       background: rgba(255, 255, 255, 0.02);
-      border-bottom: 1px solid var(--ide-border);
+      border-bottom: 1px solid var(--ide-border-subtle);
       font-size: 11px;
+      gap: 8px;
     }
     .git-branch-pill {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 5px;
-      color: #38bdf8;
-      font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      padding: 3px 8px;
+      color: #93c5fd;
+      font-weight: 550;
+      font-size: 11.5px;
       cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .git-branch-pill:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
     }
     .git-remote-pill {
-      font-size: 10.5px;
+      font-size: 11px;
       border-radius: 4px;
-      padding: 2px 7px;
-      max-width: 140px;
+      padding: 3px 8px;
+      max-width: 145px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       transition: all 0.15s ease;
+      flex-shrink: 0;
+      height: 22px;
+      box-sizing: border-box;
     }
     .git-remote-pill.unlinked {
-      background: rgba(56, 189, 248, 0.12);
+      background: rgba(56, 189, 248, 0.08);
       color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      font-weight: 600;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      font-weight: 550;
     }
     .git-remote-pill.unlinked:hover {
-      background: rgba(56, 189, 248, 0.22);
+      background: rgba(56, 189, 248, 0.18);
       border-color: #38bdf8;
       box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
     }
     .git-remote-pill.linked {
-      background: rgba(34, 197, 94, 0.1);
+      background: rgba(34, 197, 94, 0.08);
       color: #4ade80;
       border: 1px solid rgba(34, 197, 94, 0.25);
       font-weight: 550;
     }
     .git-remote-pill.linked:hover {
-      background: rgba(34, 197, 94, 0.2);
+      background: rgba(34, 197, 94, 0.18);
       border-color: #4ade80;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.15);
+    }
+    .git-clean-tree-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 16px;
+      text-align: center;
+      gap: 4px;
+      user-select: none;
     }
     .git-publish-card {
       margin: 10px 12px;
@@ -2574,7 +2615,7 @@
       <!-- 4C. Source Control (Git) View -->
       <div class="git-panel" id="viewGitWrap">
         <!-- Header -->
-        <div class="git-header">
+        <div class="sidebar-header">
           <span>Source Control</span>
           <div class="sidebar-actions">
             <div class="sidebar-tool-btn" onclick="loadGitStatus()" title="Refresh (⟳)">
@@ -2584,10 +2625,10 @@
               <svg class="icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </div>
             <div class="sidebar-tool-btn" onclick="openGitRemoteModal()" title="Connect / Manage GitHub Remote">
-              <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <svg class="octocat-icon" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
             </div>
             <div class="sidebar-tool-btn" onclick="pushGitToRemote()" title="Push to Remote / GitHub">
-              <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path></svg>
+              <svg class="icon-sm" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
             </div>
           </div>
         </div>
@@ -2607,6 +2648,7 @@
             <div class="git-branch-pill" onclick="promptSwitchBranch()" title="Current Branch (click to switch)">
               <svg class="icon-xs" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
               <span id="gitBranchName">main</span>
+              <svg class="icon-xxs" viewBox="0 0 24 24" style="opacity: 0.6; margin-left: -2px;"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
             <div id="gitRemotePill" class="git-remote-pill unlinked" onclick="openGitRemoteModal()" title="Click to Connect GitHub">
               <span id="gitRemoteLabel">+ Connect GitHub</span>
@@ -2616,7 +2658,7 @@
           <!-- Publish to GitHub Card (shown when no remote configured) -->
           <div id="gitPublishCard" class="git-publish-card" style="display: none;">
             <div class="git-publish-head">
-              <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <svg class="octocat-icon" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
               <span>Connect to GitHub</span>
             </div>
             <p>Link your personal GitHub account to push commits, backup code, and publish this repository.</p>
@@ -2635,7 +2677,7 @@
                 <span>Commit</span>
               </button>
               <button class="git-btn-secondary" id="btnGitCommitPush" onclick="executeGitCommit(true)" title="Commit and Push to GitHub">
-                <svg class="icon-xs" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path></svg>
+                <svg class="icon-xs" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                 <span>Push</span>
               </button>
             </div>
@@ -4731,7 +4773,7 @@
             .replace(/^git@github\.com:/, "")
             .replace(/\.git$/, "");
           if (remoteLabel) {
-            remoteLabel.innerHTML = `<svg class="icon-xxs" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block; vertical-align:-1px; margin-right:3px;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>${cleanUrl.length > 16 ? cleanUrl.slice(0, 14) + '...' : cleanUrl}`;
+            remoteLabel.innerHTML = `<svg class="octocat-icon" style="width: 12px !important; height: 12px !important; margin-right: 4px;" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>${cleanUrl.length > 15 ? cleanUrl.slice(0, 13) + '...' : cleanUrl}`;
           }
           if (remotePill) {
             remotePill.className = "git-remote-pill linked";
@@ -4773,7 +4815,13 @@
         if (changesList) {
           changesList.innerHTML = "";
           if (unstagedFiles.length === 0 && stagedFiles.length === 0) {
-            changesList.innerHTML = `<div style="color: var(--text-dim); font-size: 11.5px; padding: 8px 12px;">Working tree clean.</div>`;
+            changesList.innerHTML = `
+              <div class="git-clean-tree-box">
+                <svg class="icon-sm" viewBox="0 0 24 24" style="color: #4ade80; stroke-width: 2.2; margin-bottom: 2px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <div style="color: #cbd5e1; font-weight: 550; font-size: 11.5px;">No changes detected</div>
+                <div style="color: var(--text-dim); font-size: 11px;">Working tree is clean</div>
+              </div>
+            `;
           } else {
             unstagedFiles.forEach(f => {
               changesList.appendChild(createGitFileElement(f, false));
