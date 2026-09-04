@@ -37,7 +37,21 @@ echo "[+] Installing Python dependencies..."
 pip install --upgrade pip -q
 pip install -r "${ROOT_DIR}/requirements.txt" -q
 
-# 4. Check Ollama (Local AI Engine)
+# 4. Install Desktop IDE dependencies (Node/Electron)
+echo ""
+echo "[+] Checking Desktop IDE environment..."
+if command -v npm &> /dev/null; then
+    echo "[+] Installing Electron desktop packages..."
+    (cd "${ROOT_DIR}" && npm install -q)
+    if [ -f "${ROOT_DIR}/scripts/setup-desktop.sh" ]; then
+        echo "[+] Setting up Linux desktop shortcut..."
+        bash "${ROOT_DIR}/scripts/setup-desktop.sh"
+    fi
+else
+    echo "    [!] Node/NPM not found. Web mode will work, but install Node.js to use Desktop IDE mode."
+fi
+
+# 5. Check Ollama (Local AI Engine)
 echo ""
 echo "[+] Checking Local Ollama AI Engine..."
 if command -v ollama &> /dev/null; then
@@ -58,7 +72,10 @@ echo ""
 echo "=================================================="
 echo "  Installation Successful!                        "
 echo "=================================================="
-echo "To launch the IDE, run:"
+echo "To launch as Native Desktop IDE:"
+echo "    npm start   (or click 'VexP Code IDE' on your desktop)"
+echo ""
+echo "To launch in Web Browser mode:"
 echo "    ./scripts/start.sh"
-echo "Or open http://127.0.0.1:7860 in your browser."
+echo "    (open http://127.0.0.1:7860)"
 echo "=================================================="

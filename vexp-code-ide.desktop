@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=VexP Code IDE
+GenericName=AI Code IDE
+Comment=Autonomous AI Coding Harness and IDE
+Exec=bash -c "cd $(dirname %k) && ./scripts/launch-ide.sh"
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=VexP Code IDE
+StartupNotify=true
+Keywords=ide;ai;code;claude;harness;

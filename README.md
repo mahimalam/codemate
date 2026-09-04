@@ -66,14 +66,34 @@ cd your-repo
 ### 2. Install
 ```bash
 bash scripts/install.sh
+npm install
 ```
 
 ### 3. Launch
+
+#### Option A: Native Desktop IDE (Recommended for Linux/Desktop)
+```bash
+npm start
+```
+*Or double-click the **VexP Code IDE** icon on your desktop or application menu.* Electron automatically manages the backend server lifecycle.
+
+#### Option B: Web Browser Mode
 ```bash
 bash scripts/start.sh
 ```
-
 Open **http://127.0.0.1:7860** in your browser.
+
+---
+
+## 📦 Building Standalone Desktop Packages
+
+To package the IDE as a standalone Linux application:
+```bash
+npm run dist:linux
+```
+This generates:
+- **`dist/*.AppImage`**: A single portable executable that runs on any Linux distribution without installation.
+- **`dist/*.deb`**: A Debian/Ubuntu system package installer.
 
 ---
 

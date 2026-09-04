@@ -1,0 +1,38 @@
+{
+  "name": "vexp-code-ide",
+  "version": "2.6.0",
+  "description": "Autonomous AI Coding Harness and Desktop IDE",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dist:linux": "electron-builder --linux AppImage deb"
+  },
+  "keywords": [
+    "ide",
+    "ai",
+    "claude-code",
+    "coding-agent",
+    "harness",
+    "electron"
+  ],
+  "author": "VexP",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.4.0"
+  },
+  "build": {
+    "appId": "com.vexp.codeide",
+    "productName": "VexP Code IDE",
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "assets/icon.png"
+    }
+  }
+}
