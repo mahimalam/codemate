@@ -407,21 +407,49 @@ class GitRemotePayload(BaseModel):
     branch: Optional[str] = None
     path: Optional[str] = None
 
+class GitSetRemotePayload(BaseModel):
+    name: Optional[str] = "origin"
+    url: str
+    token: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    push_now: bool = False
+    branch: Optional[str] = None
+    path: Optional[str] = None
+
+class GitTestRemotePayload(BaseModel):
+    remote: Optional[str] = "origin"
+    url: Optional[str] = None
+    token: Optional[str] = None
+    username: Optional[str] = None
+    path: Optional[str] = None
+
+class GitRemoveRemotePayload(BaseModel):
+    name: Optional[str] = "origin"
+    path: Optional[str] = None
+
+class GitConfigPayload(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    path: Optional[str] = None
+
 @app.get("/api/git/status")
 def git_status_endpoint(path: Optional[str] = Query(None)):
     target_dir = path or get_active_workspace()
     try:
         is_git = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=target_dir).returncode == 0
         if not is_git:
-            return {"branch": "none", "is_repo": False, "files": [], "staged": [], "unstaged": [], "count": 0, "remote_url": ""}
+            return {"branch": "none", "is_repo": False, "files": [], "staged": [], "unstaged": [], "count": 0, "remote_url": "", "has_remote": False}
         
         branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
         if not branch:
             head_rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
             branch = head_rev or "main"
         
-        remote_url = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        raw_remote_url = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        remote_url = re.sub(r'https://[^@]+@github\.com', 'https://github.com', raw_remote_url)
         status_raw = subprocess.run(["git", "status", "--porcelain=v1"], capture_output=True, text=True, cwd=target_dir).stdout
+
         
         staged = []
         unstaged = []
@@ -457,10 +485,11 @@ def git_status_endpoint(path: Optional[str] = Query(None)):
             "staged": staged,
             "unstaged": unstaged,
             "count": len(files),
-            "remote_url": remote_url
+            "remote_url": remote_url,
+            "has_remote": bool(remote_url)
         }
     except Exception as e:
-        return {"branch": "none", "is_repo": False, "files": [], "staged": [], "unstaged": [], "count": 0, "error": str(e), "remote_url": ""}
+        return {"branch": "none", "is_repo": False, "files": [], "staged": [], "unstaged": [], "count": 0, "error": str(e), "remote_url": "", "has_remote": False}
 
 @app.post("/api/git/init")
 def git_init_endpoint(payload: GitActionPayload):
@@ -586,6 +615,153 @@ def git_diff_endpoint(file: str = Query(...), path: Optional[str] = Query(None))
             "modified": modified_content,
             "language": language
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/git/remote/set")
+def git_set_remote_endpoint(payload: GitSetRemotePayload):
+    target_dir = payload.path or get_active_workspace()
+    try:
+        is_git = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=target_dir).returncode == 0
+        if not is_git:
+            subprocess.run(["git", "init", "-b", "main"], capture_output=True, text=True, cwd=target_dir)
+
+        if payload.username and payload.username.strip():
+            subprocess.run(["git", "config", "user.name", payload.username.strip()], capture_output=True, text=True, cwd=target_dir)
+        if payload.email and payload.email.strip():
+            subprocess.run(["git", "config", "user.email", payload.email.strip()], capture_output=True, text=True, cwd=target_dir)
+
+        raw_url = payload.url.strip()
+        if not raw_url:
+            raise HTTPException(status_code=400, detail="Repository URL cannot be empty")
+
+        target_url = raw_url
+        if target_url.startswith("https://github.com/") and not target_url.endswith(".git"):
+            target_url += ".git"
+
+        # Embed Personal Access Token if provided
+        if payload.token and payload.token.strip() and target_url.startswith("https://"):
+            tok = payload.token.strip()
+            clean_host_path = re.sub(r'^https://[^@]+@', 'https://', target_url)
+            if payload.username and payload.username.strip():
+                u = payload.username.strip()
+                target_url = clean_host_path.replace("https://", f"https://{u}:{tok}@")
+            else:
+                target_url = clean_host_path.replace("https://", f"https://{tok}@")
+
+        remote_name = payload.name or "origin"
+
+        existing_remotes = subprocess.run(["git", "remote"], capture_output=True, text=True, cwd=target_dir).stdout.split()
+        if remote_name in existing_remotes:
+            cmd = ["git", "remote", "set-url", remote_name, target_url]
+        else:
+            cmd = ["git", "remote", "add", remote_name, target_url]
+        
+        rem_res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+        if rem_res.returncode != 0:
+            return {"success": False, "output": rem_res.stderr.strip()}
+
+        push_output = ""
+        if payload.push_now:
+            branch = payload.branch
+            if not branch:
+                branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip() or "main"
+            push_res = subprocess.run(["git", "push", "-u", remote_name, branch], capture_output=True, text=True, cwd=target_dir)
+            push_output = push_res.stdout.strip() or push_res.stderr.strip()
+            if push_res.returncode != 0:
+                clean_push_out = re.sub(r'https://[^@]+@', 'https://', push_output)
+                return {
+                    "success": False,
+                    "output": f"Remote saved, but push failed:\n{clean_push_out}",
+                    "remote_url": re.sub(r'https://[^@]+@github\.com', 'https://github.com', target_url)
+                }
+
+        clean_url = re.sub(r'https://[^@]+@github\.com', 'https://github.com', target_url)
+        return {
+            "success": True,
+            "output": push_output or f"Successfully connected remote '{remote_name}' to {clean_url}",
+            "remote_url": clean_url
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/git/remote/test")
+def git_test_remote_endpoint(payload: GitTestRemotePayload):
+    target_dir = payload.path or get_active_workspace()
+    try:
+        test_target = payload.remote or "origin"
+        if payload.url:
+            u = payload.url.strip()
+            if payload.token and payload.token.strip() and u.startswith("https://"):
+                tok = payload.token.strip()
+                clean = re.sub(r'^https://[^@]+@', 'https://', u)
+                if payload.username and payload.username.strip():
+                    test_target = clean.replace("https://", f"https://{payload.username.strip()}:{tok}@")
+                else:
+                    test_target = clean.replace("https://", f"https://{tok}@")
+            else:
+                test_target = u
+
+        res = subprocess.run(["git", "ls-remote", test_target], capture_output=True, text=True, cwd=target_dir, timeout=12)
+        if res.returncode == 0:
+            lines = res.stdout.strip().splitlines()
+            return {
+                "success": True,
+                "output": f"Connection verified! Found {len(lines)} references on remote repository.",
+                "refs_count": len(lines)
+            }
+        else:
+            err = res.stderr.strip() or res.stdout.strip()
+            clean_err = re.sub(r'https://[^@]+@', 'https://', err)
+            return {"success": False, "output": clean_err or "Failed to connect to remote repository."}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "output": "Connection timed out after 12 seconds."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/git/remote/remove")
+def git_remove_remote_endpoint(payload: GitRemoveRemotePayload):
+    target_dir = payload.path or get_active_workspace()
+    try:
+        name = payload.name or "origin"
+        res = subprocess.run(["git", "remote", "remove", name], capture_output=True, text=True, cwd=target_dir)
+        return {"success": res.returncode == 0, "output": res.stdout.strip() or res.stderr.strip()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/git/config")
+def git_get_config_endpoint(path: Optional[str] = Query(None)):
+    target_dir = path or get_active_workspace()
+    try:
+        name = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        if not name:
+            name = subprocess.run(["git", "config", "--global", "user.name"], capture_output=True, text=True).stdout.strip()
+        email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        if not email:
+            email = subprocess.run(["git", "config", "--global", "user.email"], capture_output=True, text=True).stdout.strip()
+        
+        raw_remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        clean_remote = re.sub(r'https://[^@]+@github\.com', 'https://github.com', raw_remote)
+        has_token = "@github.com" in raw_remote
+
+        return {
+            "username": name,
+            "email": email,
+            "remote_url": clean_remote,
+            "has_token": has_token
+        }
+    except Exception as e:
+        return {"username": "", "email": "", "remote_url": "", "has_token": False, "error": str(e)}
+
+@app.post("/api/git/config")
+def git_set_config_endpoint(payload: GitConfigPayload):
+    target_dir = payload.path or get_active_workspace()
+    try:
+        if payload.username is not None:
+            subprocess.run(["git", "config", "user.name", payload.username.strip()], capture_output=True, text=True, cwd=target_dir)
+        if payload.email is not None:
+            subprocess.run(["git", "config", "user.email", payload.email.strip()], capture_output=True, text=True, cwd=target_dir)
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

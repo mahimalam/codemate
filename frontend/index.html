@@ -760,16 +760,178 @@
       cursor: pointer;
     }
     .git-remote-pill {
-      font-size: 10px;
-      background: rgba(56, 189, 248, 0.1);
-      color: #7dd3fc;
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      font-size: 10.5px;
       border-radius: 4px;
-      padding: 1px 6px;
-      max-width: 120px;
+      padding: 2px 7px;
+      max-width: 140px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .git-remote-pill.unlinked {
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 600;
+    }
+    .git-remote-pill.unlinked:hover {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+    }
+    .git-remote-pill.linked {
+      background: rgba(34, 197, 94, 0.1);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      font-weight: 550;
+    }
+    .git-remote-pill.linked:hover {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: #4ade80;
+    }
+    .git-publish-card {
+      margin: 10px 12px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.85));
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .git-publish-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .git-publish-card p {
+      margin: 0;
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.45;
+    }
+    .git-instructions-banner {
+      background: rgba(56, 189, 248, 0.07);
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 11.5px;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .git-inst-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .git-inst-step .step-num {
+      background: #007acc;
+      color: #ffffff;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .git-password-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .git-password-wrap input {
+      padding-right: 32px;
+    }
+    .btn-eye-toggle {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      color: #858585;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+    .btn-eye-toggle:hover {
+      color: #cccccc;
+    }
+    .git-modal-status-box {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid transparent;
+    }
+    .git-btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .git-btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+    }
+    .git-token-link {
+      font-size: 11px;
+      color: #38bdf8;
+      text-decoration: none;
+    }
+    .git-token-link:hover {
+      text-decoration: underline;
+    }
+    .git-field-group {
+      margin-bottom: 12px;
+    }
+    .git-field-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cccccc;
+      margin-bottom: 5px;
+    }
+    .git-field-group .field-hint {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .git-input-full {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .git-modal-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      border-top: 1px solid var(--ide-border);
+      padding-top: 14px;
     }
     .git-commit-box {
       padding: 10px 12px;
@@ -2421,6 +2583,9 @@
             <div class="sidebar-tool-btn" onclick="stageAllFiles(true)" title="Stage All Changes (+)">
               <svg class="icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </div>
+            <div class="sidebar-tool-btn" onclick="openGitRemoteModal()" title="Connect / Manage GitHub Remote">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            </div>
             <div class="sidebar-tool-btn" onclick="pushGitToRemote()" title="Push to Remote / GitHub">
               <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path></svg>
             </div>
@@ -2443,9 +2608,22 @@
               <svg class="icon-xs" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
               <span id="gitBranchName">main</span>
             </div>
-            <div id="gitRemotePill" class="git-remote-pill" title="Remote Repository">
-              <span id="gitRemoteLabel">Local</span>
+            <div id="gitRemotePill" class="git-remote-pill unlinked" onclick="openGitRemoteModal()" title="Click to Connect GitHub">
+              <span id="gitRemoteLabel">+ Connect GitHub</span>
             </div>
+          </div>
+
+          <!-- Publish to GitHub Card (shown when no remote configured) -->
+          <div id="gitPublishCard" class="git-publish-card" style="display: none;">
+            <div class="git-publish-head">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <span>Connect to GitHub</span>
+            </div>
+            <p>Link your personal GitHub account to push commits, backup code, and publish this repository.</p>
+            <button class="git-btn-primary" onclick="openGitRemoteModal()">
+              <svg class="icon-xs" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Connect GitHub Repository</span>
+            </button>
           </div>
 
           <!-- Commit Input Area -->
@@ -2891,6 +3069,97 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. Dedicated GitHub & Remote Repository Modal -->
+  <div class="modal-backdrop" id="gitRemoteModal" style="display: none;">
+    <div class="ide-modal git-remote-modal-box" style="width: 540px;">
+      <div class="modal-head">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span>Connect Personal GitHub Repository</span>
+        </div>
+        <div class="sidebar-tool-btn" onclick="closeGitRemoteModal()">
+          <svg class="icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+      </div>
+
+      <div class="git-modal-body" style="padding-top: 6px;">
+        <!-- Quick Instructions Card -->
+        <div class="git-instructions-banner">
+          <div class="git-inst-step">
+            <span class="step-num">1</span>
+            <span>Create a repository on <strong>github.com</strong> (e.g. <code>my-project</code>)</span>
+          </div>
+          <div class="git-inst-step">
+            <span class="step-num">2</span>
+            <span>Paste your repository HTTPS or SSH clone URL below</span>
+          </div>
+          <div class="git-inst-step">
+            <span class="step-num">3</span>
+            <span>(Recommended) Enter a Personal Access Token (PAT) so <code>git push</code> never prompts in terminal</span>
+          </div>
+        </div>
+
+        <div class="git-field-group">
+          <label>GitHub Repository URL <span style="color: #ef4444;">*</span></label>
+          <input type="text" id="gitModalRemoteUrl" class="custom-input git-input-full" placeholder="https://github.com/username/my-project.git">
+          <div class="field-hint">Accepts standard HTTPS (<code>https://github.com/user/repo.git</code>) or SSH (<code>git@github.com:...</code>).</div>
+        </div>
+
+        <div class="git-field-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <label style="margin-bottom: 0;">GitHub Personal Access Token (PAT)</label>
+            <a href="https://github.com/settings/tokens" target="_blank" class="git-token-link">Create token on GitHub ↗</a>
+          </div>
+          <div class="git-password-wrap">
+            <input type="password" id="gitModalPatToken" class="custom-input git-input-full" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+            <button type="button" class="btn-eye-toggle" onclick="togglePatVisibility()" title="Show/Hide Token">
+              <svg class="icon-xs" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+          <div class="field-hint">GitHub classic token with <code>repo</code> permissions. Saved securely into your local repository's remote.</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="git-field-group">
+            <label>Git Username</label>
+            <input type="text" id="gitModalUsername" class="custom-input git-input-full" placeholder="e.g. mahimalam2400">
+          </div>
+          <div class="git-field-group">
+            <label>Git Email</label>
+            <input type="email" id="gitModalEmail" class="custom-input git-input-full" placeholder="e.g. user@example.com">
+          </div>
+        </div>
+
+        <div class="git-field-group" style="margin-top: 6px; margin-bottom: 6px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: #cccccc; font-weight: normal;">
+            <input type="checkbox" id="gitModalPushNow" checked style="cursor: pointer; accent-color: #007acc;">
+            <span>Automatically push current branch to GitHub after connecting</span>
+          </label>
+        </div>
+
+        <!-- Live Status / Feedback box -->
+        <div id="gitModalStatus" class="git-modal-status-box" style="display: none;"></div>
+
+        <!-- Action Buttons -->
+        <div class="git-modal-actions">
+          <button class="git-btn-secondary" onclick="testGitRemoteConnection()" id="btnTestRemote" title="Verify connection to GitHub repository">
+            <svg class="icon-xs" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>Test Connection</span>
+          </button>
+          <button class="git-btn-danger" onclick="removeGitRemote()" id="btnRemoveRemote" style="display: none;" title="Disconnect remote origin">
+            <span>Disconnect</span>
+          </button>
+          <div style="flex: 1;"></div>
+          <button class="git-btn-secondary" onclick="closeGitRemoteModal()">Cancel</button>
+          <button class="git-btn-primary" onclick="saveAndConnectGitRemote()" id="btnSaveRemote">
+            <svg class="icon-xs" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Connect & Sync</span>
+          </button>
         </div>
       </div>
     </div>
@@ -4454,16 +4723,28 @@
         // Update Remote / GitHub pill
         const remoteLabel = document.getElementById("gitRemoteLabel");
         const remotePill = document.getElementById("gitRemotePill");
+        const publishCard = document.getElementById("gitPublishCard");
+
         if (data.remote_url) {
           let cleanUrl = data.remote_url
             .replace(/^https?:\/\/github\.com\//, "")
             .replace(/^git@github\.com:/, "")
             .replace(/\.git$/, "");
-          if (remoteLabel) remoteLabel.innerText = cleanUrl.length > 16 ? cleanUrl.slice(0, 14) + "..." : cleanUrl;
-          if (remotePill) remotePill.title = `GitHub Remote: ${data.remote_url}`;
+          if (remoteLabel) {
+            remoteLabel.innerHTML = `<svg class="icon-xxs" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block; vertical-align:-1px; margin-right:3px;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>${cleanUrl.length > 16 ? cleanUrl.slice(0, 14) + '...' : cleanUrl}`;
+          }
+          if (remotePill) {
+            remotePill.className = "git-remote-pill linked";
+            remotePill.title = `GitHub Remote: ${data.remote_url} (Click to manage)`;
+          }
+          if (publishCard) publishCard.style.display = "none";
         } else {
-          if (remoteLabel) remoteLabel.innerText = "Local";
-          if (remotePill) remotePill.title = "Local repository (No remote configured)";
+          if (remoteLabel) remoteLabel.innerText = "+ Connect GitHub";
+          if (remotePill) {
+            remotePill.className = "git-remote-pill unlinked";
+            remotePill.title = "Click to connect your personal GitHub repository";
+          }
+          if (publishCard) publishCard.style.display = "block";
         }
 
         // Render Staged Changes
@@ -4719,6 +5000,18 @@
     }
 
     async function pushGitToRemote() {
+      if (!gitStatusData || !gitStatusData.remote_url) {
+        openGitRemoteModal();
+        const statusBox = document.getElementById("gitModalStatus");
+        if (statusBox) {
+          statusBox.style.display = "block";
+          statusBox.style.background = "rgba(245, 158, 11, 0.15)";
+          statusBox.style.borderColor = "rgba(245, 158, 11, 0.3)";
+          statusBox.style.color = "#fbbf24";
+          statusBox.innerText = "Please connect your GitHub repository before pushing.";
+        }
+        return;
+      }
       appendTermOutput("\n[Git] Pushing to remote (origin)...\n");
       try {
         const res = await fetch("/api/git/push", {
@@ -4732,9 +5025,221 @@
           loadGitStatus();
         } else {
           appendTermOutput(`[Git Push Error] ${data.output || 'Failed to push. Check remote credentials or network.'}\n`);
+          if (confirm("Push failed. Would you like to check or update your GitHub credentials/remote?")) {
+            openGitRemoteModal();
+          }
         }
       } catch (e) {
         appendTermOutput(`[Git Push Exception] ${e}\n`);
+      }
+    }
+
+    // GitHub Connection Modal Functions
+    async function openGitRemoteModal() {
+      const modal = document.getElementById("gitRemoteModal");
+      if (!modal) return;
+      modal.style.display = "flex";
+
+      const statusBox = document.getElementById("gitModalStatus");
+      if (statusBox) {
+        statusBox.style.display = "none";
+        statusBox.innerText = "";
+      }
+
+      try {
+        const path = currentWorkspace ? currentWorkspace.current_path : "";
+        const res = await fetch(`/api/git/config?path=${encodeURIComponent(path)}`);
+        const cfg = await res.json();
+        
+        const urlInput = document.getElementById("gitModalRemoteUrl");
+        const userInput = document.getElementById("gitModalUsername");
+        const emailInput = document.getElementById("gitModalEmail");
+        const removeBtn = document.getElementById("btnRemoveRemote");
+        
+        if (urlInput && cfg.remote_url) urlInput.value = cfg.remote_url;
+        if (userInput && cfg.username) userInput.value = cfg.username;
+        if (emailInput && cfg.email) emailInput.value = cfg.email;
+        
+        if (removeBtn) {
+          removeBtn.style.display = cfg.remote_url ? "inline-flex" : "none";
+        }
+      } catch (e) {
+        console.error("Failed to load git config:", e);
+      }
+    }
+
+    function closeGitRemoteModal() {
+      const modal = document.getElementById("gitRemoteModal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function togglePatVisibility() {
+      const input = document.getElementById("gitModalPatToken");
+      if (!input) return;
+      input.type = input.type === "password" ? "text" : "password";
+    }
+
+    async function testGitRemoteConnection() {
+      const urlInput = document.getElementById("gitModalRemoteUrl");
+      const patInput = document.getElementById("gitModalPatToken");
+      const userInput = document.getElementById("gitModalUsername");
+      const statusBox = document.getElementById("gitModalStatus");
+      const btn = document.getElementById("btnTestRemote");
+
+      const url = urlInput ? urlInput.value.trim() : "";
+      if (!url) {
+        if (statusBox) {
+          statusBox.style.display = "block";
+          statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+          statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          statusBox.style.color = "#f87171";
+          statusBox.innerText = "Please enter a GitHub repository URL first.";
+        }
+        if (urlInput) urlInput.focus();
+        return;
+      }
+
+      if (statusBox) {
+        statusBox.style.display = "block";
+        statusBox.style.background = "rgba(56, 189, 248, 0.1)";
+        statusBox.style.borderColor = "rgba(56, 189, 248, 0.3)";
+        statusBox.style.color = "#38bdf8";
+        statusBox.innerText = "Testing remote connection to GitHub...";
+      }
+      if (btn) btn.disabled = true;
+
+      try {
+        const path = currentWorkspace ? currentWorkspace.current_path : "";
+        const res = await fetch("/api/git/remote/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: url,
+            token: patInput ? patInput.value.trim() : "",
+            username: userInput ? userInput.value.trim() : "",
+            path: path
+          })
+        });
+        const data = await res.json();
+        if (statusBox) {
+          statusBox.style.display = "block";
+          if (data.success) {
+            statusBox.style.background = "rgba(34, 197, 94, 0.15)";
+            statusBox.style.borderColor = "rgba(34, 197, 94, 0.3)";
+            statusBox.style.color = "#4ade80";
+            statusBox.innerText = "✓ " + data.output;
+          } else {
+            statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+            statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            statusBox.style.color = "#f87171";
+            statusBox.innerText = "✗ Connection failed:\n" + data.output;
+          }
+        }
+      } catch (e) {
+        if (statusBox) {
+          statusBox.style.display = "block";
+          statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+          statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          statusBox.style.color = "#f87171";
+          statusBox.innerText = "Error: " + e.message;
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function saveAndConnectGitRemote() {
+      const urlInput = document.getElementById("gitModalRemoteUrl");
+      const patInput = document.getElementById("gitModalPatToken");
+      const userInput = document.getElementById("gitModalUsername");
+      const emailInput = document.getElementById("gitModalEmail");
+      const pushNowCheck = document.getElementById("gitModalPushNow");
+      const statusBox = document.getElementById("gitModalStatus");
+      const btn = document.getElementById("btnSaveRemote");
+
+      const url = urlInput ? urlInput.value.trim() : "";
+      if (!url) {
+        if (statusBox) {
+          statusBox.style.display = "block";
+          statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+          statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          statusBox.style.color = "#f87171";
+          statusBox.innerText = "Please enter your GitHub repository URL.";
+        }
+        if (urlInput) urlInput.focus();
+        return;
+      }
+
+      if (statusBox) {
+        statusBox.style.display = "block";
+        statusBox.style.background = "rgba(56, 189, 248, 0.1)";
+        statusBox.style.borderColor = "rgba(56, 189, 248, 0.3)";
+        statusBox.style.color = "#38bdf8";
+        statusBox.innerText = "Connecting to GitHub and syncing remote origin...";
+      }
+      if (btn) btn.disabled = true;
+
+      try {
+        const path = currentWorkspace ? currentWorkspace.current_path : "";
+        const res = await fetch("/api/git/remote/set", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "origin",
+            url: url,
+            token: patInput ? patInput.value.trim() : "",
+            username: userInput ? userInput.value.trim() : "",
+            email: emailInput ? emailInput.value.trim() : "",
+            push_now: pushNowCheck ? pushNowCheck.checked : false,
+            path: path
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (statusBox) {
+            statusBox.style.background = "rgba(34, 197, 94, 0.15)";
+            statusBox.style.borderColor = "rgba(34, 197, 94, 0.3)";
+            statusBox.style.color = "#4ade80";
+            statusBox.innerText = "✓ " + data.output;
+          }
+          appendTermOutput(`\n[GitHub] Connected to ${data.remote_url}\n${data.output}\n`);
+          loadGitStatus();
+          setTimeout(() => closeGitRemoteModal(), 1200);
+        } else {
+          if (statusBox) {
+            statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+            statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            statusBox.style.color = "#f87171";
+            statusBox.innerText = "Setup Error:\n" + data.output;
+          }
+        }
+      } catch (e) {
+        if (statusBox) {
+          statusBox.style.display = "block";
+          statusBox.style.background = "rgba(239, 68, 68, 0.15)";
+          statusBox.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          statusBox.style.color = "#f87171";
+          statusBox.innerText = "Request failed: " + e.message;
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function removeGitRemote() {
+      if (!confirm("Are you sure you want to disconnect this GitHub remote (origin)?")) return;
+      try {
+        const path = currentWorkspace ? currentWorkspace.current_path : "";
+        await fetch("/api/git/remote/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "origin", path: path })
+        });
+        appendTermOutput("\n[Git] Disconnected remote origin.\n");
+        loadGitStatus();
+        closeGitRemoteModal();
+      } catch (e) {
+        alert("Failed to remove remote: " + e);
       }
     }
 
