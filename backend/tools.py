@@ -4,6 +4,8 @@ Provides safe, scoped file operations and terminal execution for the agentic del
 """
 
 import os
+import re
+import shutil
 import subprocess
 from typing import Dict, Any, List
 
@@ -117,10 +119,45 @@ def execute_agent_tool(name: str, args: Dict[str, Any], workspace: str) -> Dict[
 
         elif name == "search_files":
             q = args.get("query", "")
-            cmd = ["grep", "-rnI", q, workspace]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            matches = res.stdout.splitlines()[:25]
-            return {"matches": matches, "count": len(res.stdout.splitlines())}
+            matches = []
+            # 1. Fast path: use system grep if available
+            if shutil.which("grep"):
+                try:
+                    cmd = ["grep", "-rnI", q, workspace]
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    matches = res.stdout.splitlines()[:25]
+                except Exception:
+                    matches = []
+
+            # 2. Universal pure-Python fallback for Windows or minimal systems
+            if not matches and q:
+                try:
+                    pattern = re.compile(re.escape(q), re.IGNORECASE)
+                    for root, dirs, files in os.walk(workspace):
+                        # Filter out common heavy / noise directories
+                        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "venv", ".venv", "__pycache__", "dist", "build")]
+                        for f in files:
+                            if f.startswith("."):
+                                continue
+                            fpath = os.path.join(root, f)
+                            rel_path = os.path.relpath(fpath, workspace).replace("\\", "/")
+                            try:
+                                with open(fpath, "r", encoding="utf-8", errors="ignore") as file_obj:
+                                    for line_no, line in enumerate(file_obj, start=1):
+                                        if pattern.search(line):
+                                            matches.append(f"{rel_path}:{line_no}:{line.strip()}")
+                                            if len(matches) >= 25:
+                                                break
+                            except Exception:
+                                continue
+                            if len(matches) >= 25:
+                                break
+                        if len(matches) >= 25:
+                            break
+                except Exception:
+                    pass
+
+            return {"matches": matches, "count": len(matches)}
 
         elif name == "write_file":
             fpath = args.get("path", "")

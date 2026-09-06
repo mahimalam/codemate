@@ -3131,15 +3131,50 @@
             <!-- Universal Preset Selector Bar -->
             <div class="preset-selector-bar">
               <span class="preset-bar-title">Presets:</span>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('mwapi')">MWAPI (Claude)</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('deepseek')">DeepSeek</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('groq')">Groq (Ultra-Fast)</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('lmstudio')">LM Studio (Local)</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('ollama')">Ollama (GPU)</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('claude')">Claude (Direct)</button>
-              <button type="button" class="preset-chip" onclick="applyProviderPreset('openai')">OpenAI</button>
+              <button type="button" class="preset-chip" style="background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b; font-weight: 600;" onclick="applyProviderPreset('free_pool')">⚡ Free Auto-Pool</button>
+              <button type="button" class="preset-chip" style="background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #10b981;" onclick="applyProviderPreset('gemini')">Gemini (1.5B Free)</button>
+              <button type="button" class="preset-chip" style="background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #10b981;" onclick="applyProviderPreset('cerebras')">Cerebras (1M/Day)</button>
+              <button type="button" class="preset-chip" style="background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #10b981;" onclick="applyProviderPreset('github_models')">GitHub Models</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('groq')">Groq</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('ollama')">Ollama</button>
               <button type="button" class="preset-chip" onclick="applyProviderPreset('openrouter')">OpenRouter</button>
-              <button type="button" class="preset-chip add-custom" onclick="addNewCustomProvider()">+ Add 3rd-Party Proxy</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('openai')">OpenAI</button>
+              <button type="button" class="preset-chip" onclick="applyProviderPreset('claude')">Claude</button>
+              <button type="button" class="preset-chip add-custom" onclick="addNewCustomProvider()">+ Proxy</button>
+            </div>
+
+            <!-- Zero-Cost Free AI Hub Card -->
+            <div class="provider-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(9,13,22,0.9) 100%); margin-bottom: 16px;">
+              <div class="provider-card-header">
+                <div class="provider-badge-title">
+                  <span class="provider-icon-tag" style="background: #10b981; color: #090d16; font-weight: 700;">FREE TIER HUB</span>
+                  <strong>Millions of Free Tokens (No Credit Card Required)</strong>
+                </div>
+              </div>
+              <div class="provider-fields" style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+                <p style="margin: 0 0 10px 0;">Use high-volume official free developer tiers with zero subscription costs. Click below to grab free API keys in under 30 seconds:</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn-subtle" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; color: #38bdf8; border-color: rgba(56,189,248,0.3);">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+                    Google AI Studio (1.5B Tokens/mo)
+                  </a>
+                  <a href="https://cloud.cerebras.ai/" target="_blank" class="btn-subtle" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; color: #10b981; border-color: rgba(16,185,129,0.3);">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+                    Cerebras Cloud (1M Tokens/Day @ 2000 t/s)
+                  </a>
+                  <a href="https://console.groq.com/keys" target="_blank" class="btn-subtle" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; color: #f59e0b; border-color: rgba(245,158,11,0.3);">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+                    Groq Cloud (Llama 3.3)
+                  </a>
+                  <a href="https://github.com/settings/tokens" target="_blank" class="btn-subtle" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; color: #c084fc; border-color: rgba(192,132,252,0.3);">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+                    GitHub Personal Token (PAT)
+                  </a>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 4px; border-left: 3px solid #f59e0b;">
+                  <strong>⚡ Free Auto-Pool Active:</strong> The IDE automatically pools your configured free keys. If any provider hits a rate limit (HTTP 429), it switches to the next free provider instantly so your coding session never crashes.
+                </div>
+              </div>
             </div>
 
             <!-- Provider Card: Ollama (Local) -->
@@ -3972,9 +4007,10 @@
           } else {
             container.innerHTML = data.cloud_models.map(m => {
               const isActive = (currentActiveProvider === m.provider && currentActiveModel === m.model);
+              const isFreeTier = (m.category === 'free_tier');
               const isCustom = (m.category === 'custom');
-              const tagLabel = isCustom ? (m.custom_name || 'Proxy') : (m.provider || 'Cloud').toUpperCase();
-              const tagColor = isCustom ? '#a78bfa' : '#38bdf8';
+              const tagLabel = isFreeTier ? (m.provider === 'free_pool' ? 'AUTO-FAILOVER' : 'FREE TIER') : (isCustom ? (m.custom_name || 'Proxy') : (m.provider || 'Cloud').toUpperCase());
+              const tagColor = isFreeTier ? (m.provider === 'free_pool' ? '#f59e0b' : '#10b981') : (isCustom ? '#a78bfa' : '#38bdf8');
               return `
                 <div class="model-choice-item ${isActive ? 'active' : ''}" onclick="switchModel('${escapeHtml(m.provider)}', '${escapeHtml(m.model)}')">
                   <div style="display: flex; align-items: center; gap: 6px;">
@@ -4006,6 +4042,15 @@
         if (provider === "ollama") {
           label.textContent = `${model} (Local)`;
           if (indicator) indicator.style.background = "#10b981";
+        } else if (provider === "free_pool") {
+          label.textContent = `⚡ Free Auto-Pool`;
+          if (indicator) indicator.style.background = "#f59e0b";
+        } else if (provider === "pollinations") {
+          label.textContent = `${model} (Zero-Key)`;
+          if (indicator) indicator.style.background = "#06b6d4";
+        } else if (["gemini", "cerebras", "groq", "github_models"].includes(provider)) {
+          label.textContent = `${model} (Free Tier)`;
+          if (indicator) indicator.style.background = "#10b981";
         } else if (provider.startsWith("custom_")) {
           label.textContent = `${model} (Proxy)`;
           if (indicator) indicator.style.background = "#a78bfa";
@@ -4018,9 +4063,9 @@
       const inpromptName = document.getElementById("inpromptModelName");
       const inpromptDot = document.getElementById("inpromptModelDot");
       if (inpromptName) {
-        inpromptName.textContent = model;
+        inpromptName.textContent = (provider === "free_pool") ? "⚡ Free Auto-Pool" : model;
         if (inpromptDot) {
-          inpromptDot.style.background = (provider === "ollama") ? "#10b981" : (provider.startsWith("custom_") ? "#a78bfa" : "#38bdf8");
+          inpromptDot.style.background = (provider === "ollama" || ["gemini", "cerebras", "groq", "github_models"].includes(provider)) ? "#10b981" : (provider === "free_pool" ? "#f59e0b" : (provider.startsWith("custom_") ? "#a78bfa" : "#38bdf8"));
         }
       }
     }
@@ -4095,6 +4140,32 @@
 
     // Provider presets mapping
     const PROVIDER_PRESETS = {
+      free_pool: {
+        target: 'free_pool',
+        name: 'Free Auto-Pool (Auto-Failover)',
+        help: 'Automatically load-balances across all configured free tiers and fails over on rate limits'
+      },
+      gemini: {
+        target: 'openai',
+        name: 'Google Gemini (1.5B Free Tokens/mo)',
+        base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        model: 'gemini-2.0-flash',
+        help: '1.5 Billion tokens/month with 1M-2M context window from Google AI Studio'
+      },
+      cerebras: {
+        target: 'openai',
+        name: 'Cerebras Cloud (1M Free Tokens/Day)',
+        base_url: 'https://api.cerebras.ai/v1',
+        model: 'llama-3.3-70b',
+        help: '1,000,000 tokens/day free at 2,000+ tokens/sec (World fastest Llama 3.3)'
+      },
+      github_models: {
+        target: 'openai',
+        name: 'GitHub Models (Free with GitHub Account)',
+        base_url: 'https://models.inference.ai.azure.com',
+        model: 'gpt-4o',
+        help: 'Free GPT-4o & Llama 3.3 using your personal GitHub token'
+      },
       mwapi: {
         target: 'custom',
         name: 'MWAPI (Claude Proxy)',
@@ -4158,6 +4229,19 @@
     function applyProviderPreset(key) {
       const preset = PROVIDER_PRESETS[key];
       if (!preset) return;
+
+      if (preset.target === 'free_pool') {
+        switchModel('free_pool', 'auto-failover');
+        const banner = document.getElementById("settingsStatusMsg");
+        if (banner) {
+          banner.style.display = "block";
+          banner.style.background = "rgba(245, 158, 11, 0.12)";
+          banner.style.border = "1px solid #f59e0b";
+          banner.style.color = "#f59e0b";
+          banner.textContent = "⚡ Free Auto-Pool activated! The agent will automatically route prompts to your free tiers and seamlessly failover across rate limits.";
+        }
+        return;
+      }
 
       if (preset.target === 'custom') {
         let existing = customProvidersList.find(cp => cp.name.toLowerCase().includes('mwapi') || (cp.base_url && cp.base_url.includes('mwapi.dev')));

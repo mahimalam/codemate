@@ -5,7 +5,8 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron . --no-sandbox",
-    "dist:linux": "electron-builder --linux AppImage deb"
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:win": "electron-builder --win nsis portable"
   },
   "keywords": [
     "ide",
@@ -30,6 +31,14 @@
       "target": [
         "AppImage",
         "deb"
+      ],
+      "category": "Development",
+      "icon": "assets/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
       ],
       "category": "Development",
       "icon": "assets/icon.png"
