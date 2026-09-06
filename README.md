@@ -64,36 +64,49 @@ cd your-repo
 ```
 
 ### 2. Install
+
+**Linux / macOS:**
 ```bash
 bash scripts/install.sh
 npm install
 ```
 
+**Windows:**
+```cmd
+scripts\install.bat
+```
+*(Or simply double-click `scripts\install.bat` in File Explorer).*
+
 ### 3. Launch
 
-#### Option A: Native Desktop IDE (Recommended for Linux/Desktop)
+#### Option A: Native Desktop IDE (Recommended)
 ```bash
 npm start
 ```
-*Or double-click the **VexP Code IDE** icon on your desktop or application menu.* Electron automatically manages the backend server lifecycle.
+*On Linux, you can also launch via desktop application menu. On Windows, double-click `scripts\start.bat`.* Electron automatically manages the backend server lifecycle.
 
 #### Option B: Web Browser Mode
-```bash
-bash scripts/start.sh
-```
-Open **http://127.0.0.1:7860** in your browser.
+- **Linux / macOS:** `bash scripts/start.sh`
+- **Windows:** `python backend\server.py`
+- Open **http://127.0.0.1:7860** in your browser.
 
 ---
 
 ## 📦 Building Standalone Desktop Packages
 
-To package the IDE as a standalone Linux application:
+To package the IDE as standalone desktop installers:
+
+**Linux (AppImage & DEB):**
 ```bash
 npm run dist:linux
 ```
-This generates:
-- **`dist/*.AppImage`**: A single portable executable that runs on any Linux distribution without installation.
-- **`dist/*.deb`**: A Debian/Ubuntu system package installer.
+Generates portable `dist/*.AppImage` and `dist/*.deb`.
+
+**Windows (Installer EXE & Portable):**
+```bash
+npm run dist:win
+```
+Generates `dist/*-Setup.exe` (NSIS installer) and `dist/*.exe` (portable).
 
 ---
 

@@ -8,13 +8,21 @@ import threading
 import subprocess
 import shutil
 import urllib.request
-import pty
-import fcntl
-import termios
 import struct
 import signal
 import asyncio
 from typing import List, Optional, Dict, Any
+
+# Cross-platform PTY detection (Linux/macOS vs Windows)
+HAS_PTY = False
+if sys.platform != "win32":
+    try:
+        import pty
+        import fcntl
+        import termios
+        HAS_PTY = True
+    except ImportError:
+        pass
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -920,103 +928,169 @@ async def terminal_websocket_endpoint(websocket: WebSocket, cwd: Optional[str] =
     if not os.path.exists(work_dir) or not os.path.isdir(work_dir):
         work_dir = os.path.expanduser("~")
 
-    master_fd, slave_fd = pty.openpty()
-    fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-    fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    if HAS_PTY:
+        # Native POSIX PTY implementation for Linux and macOS
+        master_fd, slave_fd = pty.openpty()
+        fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+        fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-    shell = os.environ.get("SHELL", "/bin/bash")
-    env = dict(os.environ)
-    env["TERM"] = "xterm-256color"
-    env["COLORTERM"] = "truecolor"
+        shell = os.environ.get("SHELL", "/bin/bash")
+        env = dict(os.environ)
+        env["TERM"] = "xterm-256color"
+        env["COLORTERM"] = "truecolor"
 
-    pid = os.fork()
-    if pid == 0:
-        os.close(master_fd)
-        os.setsid()
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
+        pid = os.fork()
+        if pid == 0:
+            os.close(master_fd)
+            os.setsid()
+            os.dup2(slave_fd, 0)
+            os.dup2(slave_fd, 1)
+            os.dup2(slave_fd, 2)
+            os.close(slave_fd)
+            try:
+                os.chdir(work_dir)
+            except Exception:
+                pass
+            try:
+                os.execvpe(shell, [shell], env)
+            except Exception:
+                os.execvpe("/bin/sh", ["/bin/sh"], env)
+            os._exit(1)
+
         os.close(slave_fd)
+
+        loop = asyncio.get_running_loop()
+        output_queue = asyncio.Queue()
+
+        def on_master_readable():
+            try:
+                data = os.read(master_fd, 4096)
+                if data:
+                    output_queue.put_nowait(data)
+            except Exception:
+                pass
+
+        loop.add_reader(master_fd, on_master_readable)
+
+        async def send_to_client():
+            try:
+                while True:
+                    data = await output_queue.get()
+                    await websocket.send_bytes(data)
+            except Exception:
+                pass
+
+        async def receive_from_client():
+            try:
+                while True:
+                    msg = await websocket.receive()
+                    if "bytes" in msg and msg["bytes"]:
+                        os.write(master_fd, msg["bytes"])
+                    elif "text" in msg and msg["text"]:
+                        text = msg["text"]
+                        if text.startswith("{"):
+                            try:
+                                ctrl = json.loads(text)
+                                if ctrl.get("type") == "resize":
+                                    rows = int(ctrl.get("rows", 24))
+                                    cols = int(ctrl.get("cols", 80))
+                                    winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                                    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                                    continue
+                            except Exception:
+                                pass
+                        os.write(master_fd, text.encode("utf-8"))
+            except (WebSocketDisconnect, Exception):
+                pass
+
+        sender_task = asyncio.create_task(send_to_client())
+        receiver_task = asyncio.create_task(receive_from_client())
+
+        done, pending = await asyncio.wait(
+            [sender_task, receiver_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        for t in pending:
+            t.cancel()
+
         try:
-            os.chdir(work_dir)
+            loop.remove_reader(master_fd)
         except Exception:
             pass
         try:
-            os.execvpe(shell, [shell], env)
-        except Exception:
-            os.execvpe("/bin/sh", ["/bin/sh"], env)
-        os._exit(1)
-
-    os.close(slave_fd)
-
-    loop = asyncio.get_running_loop()
-    output_queue = asyncio.Queue()
-
-    def on_master_readable():
-        try:
-            data = os.read(master_fd, 4096)
-            if data:
-                output_queue.put_nowait(data)
+            os.close(master_fd)
         except Exception:
             pass
-
-    loop.add_reader(master_fd, on_master_readable)
-
-    async def send_to_client():
         try:
-            while True:
-                data = await output_queue.get()
-                await websocket.send_bytes(data)
+            os.kill(pid, signal.SIGTERM)
+            await asyncio.sleep(0.05)
+            os.waitpid(pid, os.WNOHANG)
         except Exception:
             pass
-
-    async def receive_from_client():
+    else:
+        # Cross-platform / Windows asynchronous subprocess implementation (PowerShell / CMD)
+        shell_cmd = ["powershell.exe", "-NoLogo"] if shutil.which("powershell.exe") else ["cmd.exe"]
+        env = dict(os.environ)
         try:
-            while True:
-                msg = await websocket.receive()
-                if "bytes" in msg and msg["bytes"]:
-                    os.write(master_fd, msg["bytes"])
-                elif "text" in msg and msg["text"]:
-                    text = msg["text"]
-                    if text.startswith("{"):
-                        try:
-                            ctrl = json.loads(text)
-                            if ctrl.get("type") == "resize":
-                                rows = int(ctrl.get("rows", 24))
-                                cols = int(ctrl.get("cols", 80))
-                                winsize = struct.pack("HHHH", rows, cols, 0, 0)
-                                fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-                                continue
-                        except Exception:
-                            pass
-                    os.write(master_fd, text.encode("utf-8"))
-        except (WebSocketDisconnect, Exception):
+            proc = await asyncio.create_subprocess_exec(
+                *shell_cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=work_dir,
+                env=env
+            )
+        except Exception as e:
+            await websocket.send_text(f"\r\n[Terminal Error: Failed to launch shell: {e}]\r\n")
+            return
+
+        async def send_to_client_win():
+            try:
+                while True:
+                    data = await proc.stdout.read(4096)
+                    if not data:
+                        break
+                    await websocket.send_bytes(data)
+            except Exception:
+                pass
+
+        async def receive_from_client_win():
+            try:
+                while True:
+                    msg = await websocket.receive()
+                    if "bytes" in msg and msg["bytes"]:
+                        if proc.stdin:
+                            proc.stdin.write(msg["bytes"])
+                            await proc.stdin.drain()
+                    elif "text" in msg and msg["text"]:
+                        text = msg["text"]
+                        if text.startswith("{"):
+                            try:
+                                ctrl = json.loads(text)
+                                if ctrl.get("type") == "resize":
+                                    continue
+                            except Exception:
+                                pass
+                        if proc.stdin:
+                            proc.stdin.write(text.encode("utf-8"))
+                            await proc.stdin.drain()
+            except (WebSocketDisconnect, Exception):
+                pass
+
+        sender_task = asyncio.create_task(send_to_client_win())
+        receiver_task = asyncio.create_task(receive_from_client_win())
+
+        done, pending = await asyncio.wait(
+            [sender_task, receiver_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        for t in pending:
+            t.cancel()
+
+        try:
+            proc.terminate()
+        except Exception:
             pass
-
-    sender_task = asyncio.create_task(send_to_client())
-    receiver_task = asyncio.create_task(receive_from_client())
-
-    done, pending = await asyncio.wait(
-        [sender_task, receiver_task],
-        return_when=asyncio.FIRST_COMPLETED
-    )
-    for t in pending:
-        t.cancel()
-
-    try:
-        loop.remove_reader(master_fd)
-    except Exception:
-        pass
-    try:
-        os.close(master_fd)
-    except Exception:
-        pass
-    try:
-        os.kill(pid, signal.SIGTERM)
-        await asyncio.sleep(0.05)
-        os.waitpid(pid, os.WNOHANG)
-    except Exception:
-        pass
 
 # ---------------------------------------------------------------------
 # Command Execution (Fallback / Output Drawer)
@@ -1240,7 +1314,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.get("/api/stats")
 def get_stats():
-    stats = {"vram_used": "N/A", "vram_total": "4096 MiB", "linux_free": "49 GB", "storage_free": "168 GB"}
+    stats = {"vram_used": "N/A", "vram_total": "4096 MiB", "linux_free": "N/A", "storage_free": "N/A"}
     try:
         smi = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True)
         if smi.returncode == 0:
@@ -1250,11 +1324,11 @@ def get_stats():
     except:
         pass
     try:
-        df = subprocess.run(["df", "-h", "/", "/mnt/windows"], capture_output=True, text=True)
-        lines = df.stdout.strip().split("\n")
-        if len(lines) >= 3:
-            stats["linux_free"] = lines[1].split()[3]
-            stats["storage_free"] = lines[2].split()[3]
+        root_path = os.path.abspath(os.sep)
+        total, used, free = shutil.disk_usage(root_path)
+        free_gb = f"{round(free / (1024**3), 1)} GB"
+        stats["linux_free"] = free_gb
+        stats["storage_free"] = free_gb
     except:
         pass
     return stats

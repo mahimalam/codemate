@@ -45,6 +45,26 @@ function checkServerHealth() {
 }
 
 /**
+ * Detect Python executable cross-platform (Windows & Linux/macOS).
+ */
+function getPythonExecutable() {
+  const isWin = process.platform === 'win32';
+  const candidates = [
+    isWin ? path.join(ROOT_DIR, '.venv', 'Scripts', 'python.exe') : path.join(ROOT_DIR, '.venv', 'bin', 'python'),
+    isWin ? path.join(ROOT_DIR, 'venv', 'Scripts', 'python.exe') : path.join(ROOT_DIR, 'venv', 'bin', 'python')
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  // System python fallback
+  return isWin ? 'python' : 'python3';
+}
+
+/**
  * Start the Python backend process if not already running.
  */
 async function startBackendServer() {
@@ -54,15 +74,17 @@ async function startBackendServer() {
     return true;
   }
 
-  console.log(`[Electron] Starting Python backend server...`);
+  const pythonCmd = getPythonExecutable();
+  console.log(`[Electron] Starting Python backend server using: ${pythonCmd}...`);
   const pythonScript = path.join(ROOT_DIR, 'backend', 'server.py');
   const logFile = path.join(ROOT_DIR, 'server.log');
   const out = fs.openSync(logFile, 'a');
 
-  pythonProcess = spawn('python3', [pythonScript], {
+  pythonProcess = spawn(pythonCmd, [pythonScript], {
     cwd: ROOT_DIR,
     stdio: ['ignore', out, out],
-    detached: false
+    detached: false,
+    shell: process.platform === 'win32'
   });
 
   spawnedServer = true;
@@ -71,7 +93,7 @@ async function startBackendServer() {
     console.error('[Electron] Failed to spawn python backend:', err);
     dialog.showErrorBox(
       'Server Launch Error',
-      `Failed to start backend/server.py:\n${err.message}\nPlease make sure Python 3 and dependencies are installed.`
+      `Failed to start backend/server.py with command "${pythonCmd}":\n${err.message}\nPlease make sure Python 3 and dependencies are installed.`
     );
   });
 
@@ -100,13 +122,18 @@ function stopBackendServer() {
   if (spawnedServer && pythonProcess && !pythonProcess.killed) {
     console.log('[Electron] Terminating spawned Python server...');
     try {
-      pythonProcess.kill('SIGTERM');
-      const proc = pythonProcess;
-      setTimeout(() => {
-        if (proc && !proc.killed) {
-          try { proc.kill('SIGKILL'); } catch (_) {}
-        }
-      }, 3000);
+      if (process.platform === 'win32') {
+        // Clean process-tree termination on Windows
+        spawn('taskkill', ['/pid', pythonProcess.pid.toString(), '/T', '/F']);
+      } else {
+        pythonProcess.kill('SIGTERM');
+        const proc = pythonProcess;
+        setTimeout(() => {
+          if (proc && !proc.killed) {
+            try { proc.kill('SIGKILL'); } catch (_) {}
+          }
+        }, 3000);
+      }
     } catch (e) {
       console.error('[Electron] Error killing python process:', e);
     }
