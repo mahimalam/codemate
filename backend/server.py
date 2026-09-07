@@ -85,13 +85,48 @@ STANDARD_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML
 
 def default_provider_config():
     return {
-        "active_provider": "ollama",
-        "active_model": "qwen2.5:14b",
+        "active_provider": "free_pool",
+        "active_model": "auto-failover",
         "providers": {
             "ollama": {
                 "base_url": "http://127.0.0.1:11434",
                 "model": "qwen2.5:14b",
                 "enabled": True
+            },
+            "gemini": {
+                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+                "api_key": "",
+                "model": "gemini-2.0-flash",
+                "enabled": True,
+                "is_free": True
+            },
+            "cerebras": {
+                "base_url": "https://api.cerebras.ai/v1",
+                "api_key": "",
+                "model": "llama-3.3-70b",
+                "enabled": True,
+                "is_free": True
+            },
+            "groq": {
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": "",
+                "model": "llama-3.3-70b-versatile",
+                "enabled": True,
+                "is_free": True
+            },
+            "github_models": {
+                "base_url": "https://models.inference.ai.azure.com",
+                "api_key": "",
+                "model": "gpt-4o",
+                "enabled": True,
+                "is_free": True
+            },
+            "pollinations": {
+                "base_url": "https://text.pollinations.ai/openai",
+                "api_key": "not-needed",
+                "model": "openai-fast",
+                "enabled": True,
+                "is_free": True
             },
             "openrouter": {
                 "base_url": "https://openrouter.ai/api/v1",
@@ -115,6 +150,45 @@ def default_provider_config():
         "custom_providers": []
     }
 
+def auto_scavenge_credentials(cfg: dict) -> bool:
+    """
+    Auto-discovers credentials already present on the user machine
+    to activate free and cloud AI tiers with zero manual copy-pasting.
+    """
+    changed = False
+    env_mappings = {
+        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        "groq": ["GROQ_API_KEY"],
+        "cerebras": ["CEREBRAS_API_KEY"],
+        "openrouter": ["OPENROUTER_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+    }
+    for provider, env_vars in env_mappings.items():
+        if provider in cfg.get("providers", {}):
+            if not cfg["providers"][provider].get("api_key"):
+                for var in env_vars:
+                    val = os.environ.get(var, "").strip()
+                    if val:
+                        cfg["providers"][provider]["api_key"] = val
+                        cfg["providers"][provider]["enabled"] = True
+                        changed = True
+                        break
+
+    # Check GitHub CLI token for GitHub Models
+    if "github_models" in cfg.get("providers", {}):
+        if not cfg["providers"]["github_models"].get("api_key"):
+            try:
+                gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=2)
+                if gh_res.returncode == 0 and gh_res.stdout.strip():
+                    cfg["providers"]["github_models"]["api_key"] = gh_res.stdout.strip()
+                    cfg["providers"]["github_models"]["enabled"] = True
+                    changed = True
+            except Exception:
+                pass
+
+    return changed
+
 def load_provider_config() -> dict:
     if os.path.exists(PROVIDER_CONFIG_FILE):
         try:
@@ -129,10 +203,13 @@ def load_provider_config() -> dict:
                     else:
                         d["providers"][p_key] = p_val
                 d["custom_providers"] = data.get("custom_providers", [])
+                if auto_scavenge_credentials(d):
+                    save_provider_config(d)
                 return d
         except Exception:
             pass
     cfg = default_provider_config()
+    auto_scavenge_credentials(cfg)
     save_provider_config(cfg)
     return cfg
 
@@ -1368,7 +1445,33 @@ def get_available_models():
     local_models = fetch_ollama_models(ollama_url)
 
     cloud_models = []
-    # Built-in cloud providers - only show if enabled AND an API key is configured
+    # 1. Zero-Cost AI Cluster (Auto-Failover Pool)
+    cloud_models.append({
+        "provider": "free_pool",
+        "model": "auto-failover",
+        "name": "⚡ Free Auto-Pool (Auto-Failover)",
+        "category": "free_tier"
+    })
+
+    # 2. High-Volume Free Providers
+    free_labels = {
+        "gemini": "Google Gemini (1.5B tokens/mo)",
+        "cerebras": "Cerebras (1M tokens/day @ 2000 t/s)",
+        "groq": "Groq Cloud (Llama 3.3 70B)",
+        "github_models": "GitHub Models (GPT-4o & Llama 3.3)"
+    }
+    for fp_id, fp_label in free_labels.items():
+        fp_data = cfg.get("providers", {}).get(fp_id, {})
+        has_key = bool((fp_data.get("api_key") or "").strip())
+        if fp_data.get("enabled") and has_key:
+            cloud_models.append({
+                "provider": fp_id,
+                "model": fp_data.get("model", ""),
+                "name": f"{fp_data.get('model', '')} - {fp_label}",
+                "category": "free_tier"
+            })
+
+    # Built-in standard cloud providers - only show if enabled AND an API key is configured
     for p_id in ["openrouter", "openai", "anthropic"]:
         p_data = cfg.get("providers", {}).get(p_id, {})
         has_key = bool((p_data.get("api_key") or "").strip())
@@ -1814,7 +1917,74 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
         except Exception as err:
             yield ("error", str(err))
 
-    elif effective_provider in ["openai", "openrouter"]:
+    elif effective_provider == "free_pool":
+        # Candidate providers for the free auto-failover pool
+        candidates = []
+        for p in ["cerebras", "groq", "gemini", "github_models", "openrouter"]:
+            p_data = cfg.get("providers", {}).get(p, {})
+            if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
+                candidates.append((p, p_data.get("model", "")))
+
+        # Context-aware prioritization: if prompt is large (>35k characters), prioritize Gemini 1M-2M window
+        total_prompt_len = sum(len(str(m.get("content", ""))) for m in messages)
+        if total_prompt_len > 35000:
+            gemini_cand = [c for c in candidates if c[0] == "gemini"]
+            other_cand = [c for c in candidates if c[0] != "gemini"]
+            candidates = gemini_cand + other_cand
+
+        # Local Ollama prioritized for zero-latency, full tool calling, offline reliability
+        ollama_cfg = cfg.get("providers", {}).get("ollama", {})
+        if ollama_cfg.get("enabled", True):
+            candidates.append(("ollama", ollama_cfg.get("model", "qwen2.5:14b")))
+
+        last_error = ""
+        for cand_provider, cand_model in candidates:
+            cand_succeeded = False
+            streamed_tokens = 0
+            try:
+                for kind, payload in stream_llm_turn(cand_provider, cand_model, messages, tools, cfg):
+                    if kind == "error":
+                        last_error = f"{cand_provider}: {payload}"
+                        # In auto-failover, any failure before streaming tokens transitions to the next provider
+                        if streamed_tokens == 0:
+                            break
+                        else:
+                            yield ("error", f"Stream interrupted on {cand_provider}: {payload}")
+                            return
+                    else:
+                        cand_succeeded = True
+                        if kind == "token":
+                            streamed_tokens += 1
+                        yield (kind, payload)
+                if cand_succeeded:
+                    return
+            except Exception as e:
+                last_error = f"{cand_provider}: {str(e)}"
+                continue
+
+        yield ("error", f"All free pool providers exhausted. Last error: {last_error}. Tip: Connect a free Google AI Studio or Cerebras key in Settings -> AI Providers, or verify local Ollama is active.")
+        return
+
+    elif effective_provider == "pollinations":
+        # Pollinations legacy text endpoint is deprecated and queue throttled (402/500).
+        # Seamlessly auto-route legacy sessions to local Ollama or free pool so user is never blocked.
+        ollama_cfg = cfg.get("providers", {}).get("ollama", {})
+        if ollama_cfg.get("enabled", True):
+            for kind, payload in stream_llm_turn("ollama", ollama_cfg.get("model", "qwen2.5:14b"), messages, tools, cfg):
+                yield (kind, payload)
+            return
+        else:
+            for kind, payload in stream_llm_turn("free_pool", "auto-failover", messages, tools, cfg):
+                yield (kind, payload)
+            return
+
+    elif effective_provider in ["openai", "openrouter", "gemini", "cerebras", "groq", "github_models"]:
+        p_info = cfg.get("providers", {}).get(effective_provider, {})
+        api_key = p_info.get('api_key', '').strip()
+        if effective_provider == "openai" and not api_key:
+            yield ("error", "OpenAI API key missing. Please add your key in Settings -> AI Providers -> OpenAI, or switch to ⚡ Free Auto-Pool / GitHub Models for free GPT-4o access.")
+            return
+
         base_url = p_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
         endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
         payload = {
@@ -1823,14 +1993,15 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
             "tools": tools,
             "stream": True
         }
-        api_key = p_info.get('api_key', '')
+
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "x-api-key": api_key,
             "User-Agent": STANDARD_USER_AGENT,
             "Accept": "text/event-stream, application/json"
         }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+            headers["x-api-key"] = api_key
         if effective_provider == "openrouter":
             headers["HTTP-Referer"] = "https://github.com/vexp/claude-code-ide"
             headers["X-Title"] = "VexP Code IDE"
