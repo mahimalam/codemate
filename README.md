@@ -179,16 +179,6 @@ cp .env.example .env
 └── .gitignore             # Excludes all secrets and runtime data
 ```
 
----
-
-## 🔒 What Is NOT Committed to Git
-
-The following are in `.gitignore` and **never** pushed:
-
-- `~/.claude_code_ide/` - all your API keys, chat history, memories, workspaces
-- `.env` - any local environment secrets
-- `*.log` - server logs
-- `graphify-out/` - knowledge graph cache
 
 ---
 
