@@ -46,3 +46,6 @@ graphify-out/
 # ── Node (if any tooling added later) ─────────────────────────────────────────
 node_modules/
 .npm/
+
+# ── Editor Configs ───────────────────────────────────────────────────────────
+.vscode/

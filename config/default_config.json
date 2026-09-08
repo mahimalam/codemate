@@ -57,13 +57,21 @@
       "is_free": true,
       "tier_info": "GPT-4o & Llama 3.3 (auto-detected via gh auth token)"
     },
-    "pollinations": {
-      "base_url": "https://text.pollinations.ai/openai",
-      "api_key": "",
-      "model": "openai-fast",
+    "aihorde": {
+      "base_url": "https://oai.aihorde.net/v1",
+      "api_key": "0000000000",
+      "model": "koboldcpp/Mistral-Nemo-12B-Instruct",
+      "enabled": true,
+      "is_free": true,
+      "tier_info": "100% Free Anonymous Community Grid (Keyless)"
+    },
+    "freellmapi": {
+      "base_url": "http://localhost:3001/v1",
+      "api_key": "freellmapi-local",
+      "model": "auto",
       "enabled": false,
       "is_free": true,
-      "tier_info": "Zero-key instant public cloud fallback"
+      "tier_info": "34 Free Providers / 635 Endpoints via Local Gateway"
     }
   },
   "editor": {

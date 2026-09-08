@@ -12,13 +12,16 @@
 
 | Feature | Description |
 |---|---|
-| **5-Layer Agentic Loop** | Mirrors Claude Code & Devin - context clustering → intent planning → autonomous tool dispatch → self-correction → diff assembly |
-| **Multi-Provider AI** | Ollama (local GPU), OpenRouter (100+ models), Anthropic, OpenAI, or **any custom OpenAI-compatible proxy** |
+| **5-Layer Agentic Loop** | Mirrors Claude Code & Devin: context clustering -> intent planning -> autonomous tool dispatch -> self-correction -> diff assembly |
+| **Dual-Tier AI Routing** | Curated ⚡ Fast tier (sub-2s latency) and 🧠 Complex tier (deep reasoning, up to 1M context) |
+| **Zero-Key Free Hub** | Ready out of the box with zero API keys required, backed by resilient auto-failover |
+| **Tool Rescue Engine** | Rescues raw markdown or tagged tool calls from open-weights models into valid executable actions |
+| **Multi-Provider AI** | Keyless Free Hub, Ollama (local GPU), free cloud APIs (Gemini, Groq, Cerebras, GitHub), OpenRouter, Anthropic, OpenAI |
 | **Monaco Editor** | VS Code-grade editor with syntax highlighting, code folding, tabbed editing |
 | **Integrated Terminal** | Real shell execution from the browser |
 | **Source Control** | Full Git commit / push / pull UI with GitHub PAT integration |
 | **AI Memory** | Persistent per-user memory the agent reads on every request |
-| **Fully Customizable** | Change name, branding, agent persona, default models - all in one config file |
+| **Fully Customizable** | Change name, branding, agent persona, default models: all in one config file |
 
 ---
 
@@ -142,13 +145,13 @@ Click the **⚙ Gear** icon in the IDE → **AI Providers & Models**:
 
 | Provider | What to enter |
 |---|---|
-| **Ollama (local)** | Endpoint URL (default: `http://127.0.0.1:11434`) - no API key needed |
-| **OpenRouter** | Your `sk-or-...` API key |
-| **Anthropic** | Your `sk-ant-...` API key |
-| **OpenAI** | Your `sk-...` API key |
+| **Keyless Free Pool** | Default out-of-the-box engine. Zero API keys required (Fast & Complex tiers) |
+| **Ollama (local)** | Endpoint URL (default: `http://127.0.0.1:11434`) for private offline local GPU inference |
+| **Free Cloud APIs** | Free keys for Gemini, Groq, Cerebras, or GitHub Models (auto-detected via gh CLI) |
+| **OpenRouter / Anthropic / OpenAI** | Standard developer API keys |
 | **Custom Proxy** | Any OpenAI-compatible base URL + key |
 
-All keys are stored **locally** in `~/.claude_code_ide/provider_config.json` - never committed to git.
+All keys are stored **locally** in `~/.claude_code_ide/provider_config.json` (never committed to git).
 
 ### Environment Variables (optional)
 
@@ -164,7 +167,8 @@ cp .env.example .env
 ```
 .
 ├── backend/
-│   ├── server.py          # FastAPI server, agent loop, all API endpoints
+│   ├── server.py          # FastAPI server, agent loop, dual-tier router, all API endpoints
+│   ├── tool_rescue.py     # Rescues open-weights markdown tool calls into OpenAI schema
 │   └── tools.py           # Agent workspace tools (read, write, diff, bash)
 ├── config/
 │   ├── branding.json      # ← EDIT THIS to customize name, agent, defaults

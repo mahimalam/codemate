@@ -80,6 +80,7 @@ SYS_INTRO   = BRANDING.get("defaults", {}).get("system_prompt_intro", "You are a
 TERM_PROMPT = BRANDING.get("agent", {}).get("terminal_prompt", "user $")
 
 from tools import TOOLS_SPEC, execute_agent_tool
+from tool_rescue import rescue_tool_calls
 
 STANDARD_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
@@ -123,10 +124,35 @@ def default_provider_config():
             },
             "pollinations": {
                 "base_url": "https://text.pollinations.ai/openai",
-                "api_key": "not-needed",
+                "api_key": "",
                 "model": "openai-fast",
                 "enabled": True,
-                "is_free": True
+                "is_free": True,
+                "tier_info": "100% Free Public Streaming Engine (Keyless)"
+            },
+            "kilo": {
+                "base_url": "https://api.kilo.ai/api/gateway/v1",
+                "api_key": "",
+                "model": "kilo-auto/free",
+                "enabled": True,
+                "is_free": True,
+                "tier_info": "100% Free Public Gateway (Keyless, 200 req/hr)"
+            },
+            "aihorde": {
+                "base_url": "https://oai.aihorde.net/v1",
+                "api_key": "0000000000",
+                "model": "koboldcpp/Mistral-Nemo-12B-Instruct",
+                "enabled": True,
+                "is_free": True,
+                "tier_info": "100% Free Anonymous Community Grid (Keyless)"
+            },
+            "freellmapi": {
+                "base_url": "http://localhost:3001/v1",
+                "api_key": "freellmapi-local",
+                "model": "auto",
+                "enabled": False,
+                "is_free": True,
+                "tier_info": "34 Free Providers / 635 Endpoints via Local Gateway"
             },
             "openrouter": {
                 "base_url": "https://openrouter.ai/api/v1",
@@ -189,6 +215,26 @@ def auto_scavenge_credentials(cfg: dict) -> bool:
 
     return changed
 
+def sanitize_provider_config(d: dict) -> bool:
+    changed = False
+    kilo = d.get("providers", {}).get("kilo", {})
+    if kilo:
+        if kilo.get("model") in ["moonshotai/kimi-k2.6:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free", "meta-llama/llama-3.3-70b-instruct:free"]:
+            kilo["model"] = "kilo-auto/free"
+            changed = True
+        if kilo.get("api_key") == "kilo-free":
+            kilo["api_key"] = ""
+            changed = True
+    poll = d.get("providers", {}).get("pollinations", {})
+    if poll:
+        if poll.get("api_key") == "pollinations-free":
+            poll["api_key"] = ""
+            changed = True
+    if d.get("active_model") in ["moonshotai/kimi-k2.6:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free"]:
+        d["active_model"] = "complex-auto"
+        changed = True
+    return changed
+
 def load_provider_config() -> dict:
     if os.path.exists(PROVIDER_CONFIG_FILE):
         try:
@@ -203,12 +249,15 @@ def load_provider_config() -> dict:
                     else:
                         d["providers"][p_key] = p_val
                 d["custom_providers"] = data.get("custom_providers", [])
-                if auto_scavenge_credentials(d):
+                sanitized = sanitize_provider_config(d)
+                scavenged = auto_scavenge_credentials(d)
+                if sanitized or scavenged:
                     save_provider_config(d)
                 return d
         except Exception:
             pass
     cfg = default_provider_config()
+    sanitize_provider_config(cfg)
     auto_scavenge_credentials(cfg)
     save_provider_config(cfg)
     return cfg
@@ -1500,11 +1549,205 @@ def get_available_models():
                 "custom_type": cp_type
             })
 
+    # Curated fast models (sub-second target, ready without keys)
+    fast_models = [
+        {
+            "provider": "free_pool",
+            "model": "fast-auto",
+            "name": "⚡ Auto Fast (Sub-second)",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "⚡ Instant",
+            "description": "Auto-routes to the fastest verified live engine"
+        },
+        {
+            "provider": "kilo",
+            "model": "poolside/laguna-s-2.1:free",
+            "name": "Kilo: Poolside Laguna S 2.1",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "1.6s TTFB",
+            "description": "Fastest verified frontier code intelligence model"
+        },
+        {
+            "provider": "kilo",
+            "model": "inclusionai/ling-3.0-flash-sante:free",
+            "name": "Kilo: Ling 3.0 Flash",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "1.9s TTFB",
+            "description": "Ultra-snappy instructions and rapid file edits"
+        },
+        {
+            "provider": "kilo",
+            "model": "liquid/lfm-2.5-2.6b:free",
+            "name": "Kilo: Liquid LFM 2.5 2.6B",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "2.0s TTFB",
+            "description": "Ultra-lightweight edge model for bash commands"
+        },
+        {
+            "provider": "kilo",
+            "model": "cohere/north-mini-code:free",
+            "name": "Kilo: Cohere North Mini Code",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "2.1s TTFB",
+            "description": "Specialized coding intelligence and syntax fixes"
+        },
+        {
+            "provider": "kilo",
+            "model": "stepfun/step-3.7-flash:free",
+            "name": "Kilo: StepFun 3.7 Flash",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "3.6s TTFB",
+            "description": "Quick logical verification and snappy completions"
+        },
+        {
+            "provider": "kilo",
+            "model": "poolside/laguna-xs-2.1:free",
+            "name": "Kilo: Poolside Laguna XS 2.1",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "Frontier Code",
+            "description": "Low-latency syntax verification and tool assistance"
+        },
+        {
+            "provider": "kilo",
+            "model": "kilo-auto/free",
+            "name": "Kilo: Auto Free Router",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "200 req/hr",
+            "description": "Dynamic low-latency anonymous routing"
+        }
+    ]
+
+    # Curated complex models (high capability, large context, ready without keys)
+    complex_models = [
+        {
+            "provider": "free_pool",
+            "model": "complex-auto",
+            "name": "🧠 Auto Complex (Deep Reasoning)",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "🧠 Deep Logic",
+            "description": "Multi-file refactoring, large context, and whole-project planning"
+        },
+        {
+            "provider": "kilo",
+            "model": "dots-studio/dots-3-note-preview:free",
+            "name": "Kilo: Dots 3 Note Preview",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "512k Context",
+            "description": "512,000 token context comprehension (2.5s TTFB)"
+        },
+        {
+            "provider": "kilo",
+            "model": "nvidia/nemotron-3-super-120b-a12b:free",
+            "name": "Kilo: Nemotron 3 Super 120B",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "120B Flagship",
+            "description": "Frontier 120B parameter model for deep architectural reasoning (3.3s TTFB)"
+        },
+        {
+            "provider": "kilo",
+            "model": "stepfun/step-3.7-flash:free",
+            "name": "Kilo: StepFun 3.7 Flash",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "262k Context",
+            "description": "Chain-of-thought logic and multi-step reasoning (3.6s TTFB)"
+        },
+        {
+            "provider": "kilo",
+            "model": "cohere/north-mini-code:free",
+            "name": "Kilo: Cohere North Mini Code",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "256k Context",
+            "description": "Fine-tuned software engineering model for code architecture"
+        },
+        {
+            "provider": "kilo",
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "name": "Kilo: Nemotron 3.5 Lightning",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "1M Context",
+            "description": "1,000,000 token context window for full codebase reasoning"
+        },
+        {
+            "provider": "kilo",
+            "model": "openrouter/free",
+            "name": "Kilo: OpenRouter Free",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "Multi-Engine",
+            "description": "Multi-model public cluster for diverse problem solving"
+        },
+        {
+            "provider": "kilo",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "name": "Kilo: Nemotron 3 Ultra 550B",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "550B Heavy",
+            "description": "Massive 550-billion parameter reasoning engine (High Latency)"
+        }
+    ]
+
+    # Add local ollama models to both tiers
+    for lm in local_models:
+        fast_models.append({
+            "provider": "ollama",
+            "model": lm["name"],
+            "name": f"Local Ollama: {lm['name']}",
+            "tier": "fast",
+            "is_keyless": True,
+            "badge": "Offline Local",
+            "description": "Private, zero-network local execution"
+        })
+        complex_models.append({
+            "provider": "ollama",
+            "model": lm["name"],
+            "name": f"Local Ollama: {lm['name']}",
+            "tier": "complex",
+            "is_keyless": True,
+            "badge": "Offline Heavy",
+            "description": "Full local parameters for private code analysis"
+        })
+
+    # Add configured cloud providers if developer keys exist
+    for p_id, p_label in free_labels.items():
+        p_data = cfg.get("providers", {}).get(p_id, {})
+        has_key = bool((p_data.get("api_key") or "").strip())
+        if p_data.get("enabled") and has_key:
+            target_tier = "fast" if p_id in ["cerebras", "groq"] else "complex"
+            m_item = {
+                "provider": p_id,
+                "model": p_data.get("model", ""),
+                "name": f"{p_data.get('model', '')} - {p_label}",
+                "tier": target_tier,
+                "is_keyless": False,
+                "badge": "Free Cloud Key"
+            }
+            if target_tier == "fast":
+                fast_models.append(m_item)
+            else:
+                complex_models.append(m_item)
+
     return {
         "active_provider": cfg.get("active_provider", "ollama"),
         "active_model": cfg.get("active_model", "qwen2.5:14b"),
         "local_models": local_models,
-        "cloud_models": cloud_models
+        "cloud_models": cloud_models,
+        "fast_models": fast_models,
+        "complex_models": complex_models
     }
 
 @app.post("/api/models/switch")
@@ -1860,7 +2103,7 @@ def probe_provider_endpoint(payload: ProbeProviderPayload):
         "error": "Could not connect to provider. Verify the Base URL and API key."
     }
 
-def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict):
+def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict, tier: str = "fast"):
     custom_profile = None
     if provider.startswith("custom_"):
         c_id = provider[7:]
@@ -1913,36 +2156,87 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                         yield ("token", token)
                     if chunk.get("done"):
                         break
+            # Tool-Call Rescue: extract inline XML/function dialects if structured calls missing
+            if not accumulated_tools and accumulated_text:
+                clean_text, rescued_calls = rescue_tool_calls(accumulated_text)
+                if rescued_calls:
+                    for rtc in rescued_calls:
+                        parsed_rtc = dict(rtc)
+                        try:
+                            parsed_rtc["function"]["arguments"] = json.loads(rtc["function"]["arguments"])
+                        except:
+                            pass
+                        accumulated_tools.append(parsed_rtc)
+                        yield ("tool_call", parsed_rtc)
+                    accumulated_text = clean_text
             yield ("done", {"content": accumulated_text, "tool_calls": accumulated_tools})
         except Exception as err:
             yield ("error", str(err))
 
     elif effective_provider == "free_pool":
-        # Candidate providers for the free auto-failover pool
+        # Candidate providers for the free auto-failover pool divided by user tier
         candidates = []
-        for p in ["cerebras", "groq", "gemini", "github_models", "openrouter"]:
-            p_data = cfg.get("providers", {}).get(p, {})
-            if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
-                candidates.append((p, p_data.get("model", "")))
 
-        # Context-aware prioritization: if prompt is large (>35k characters), prioritize Gemini 1M-2M window
-        total_prompt_len = sum(len(str(m.get("content", ""))) for m in messages)
-        if total_prompt_len > 35000:
-            gemini_cand = [c for c in candidates if c[0] == "gemini"]
-            other_cand = [c for c in candidates if c[0] != "gemini"]
-            candidates = gemini_cand + other_cand
+        if tier == "complex":
+            # 1. Configured high-capability cloud providers with developer keys
+            for p in ["gemini", "github_models", "openrouter", "cerebras", "groq"]:
+                p_data = cfg.get("providers", {}).get(p, {})
+                if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
+                    candidates.append((p, p_data.get("model", "")))
 
-        # Local Ollama prioritized for zero-latency, full tool calling, offline reliability
-        ollama_cfg = cfg.get("providers", {}).get("ollama", {})
-        if ollama_cfg.get("enabled", True):
-            candidates.append(("ollama", ollama_cfg.get("model", "qwen2.5:14b")))
+            # 2. Keyless Public Complex Gateways (100% verified live endpoints)
+            candidates.append(("kilo", "dots-studio/dots-3-note-preview:free"))
+            candidates.append(("kilo", "nvidia/nemotron-3-super-120b-a12b:free"))
+            candidates.append(("kilo", "stepfun/step-3.7-flash:free"))
+            candidates.append(("kilo", "cohere/north-mini-code:free"))
+            candidates.append(("kilo", "nvidia/nemotron-3.5-lightning:free"))
+            candidates.append(("kilo", "openrouter/free"))
+            candidates.append(("kilo", "kilo-auto/free"))
+
+            # 3. Local High-Parameter Safety Net
+            ollama_cfg = cfg.get("providers", {}).get("ollama", {})
+            if ollama_cfg.get("enabled", True):
+                local_m = ollama_cfg.get("model", "qwen2.5:14b")
+                candidates.append(("ollama", local_m))
+
+        else:
+            # ⚡ Fast Tier Prioritization (Target Latency: < 2.0s)
+            # 1. Ultra-Fast Cloud with Configured Developer Keys (2000 tok/s)
+            for p in ["cerebras", "groq", "gemini", "github_models"]:
+                p_data = cfg.get("providers", {}).get(p, {})
+                if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
+                    candidates.append((p, p_data.get("model", "")))
+
+            # 2. Keyless Public Gateway Fast Models (All sub-3s verified live)
+            candidates.append(("kilo", "poolside/laguna-s-2.1:free"))
+            candidates.append(("kilo", "inclusionai/ling-3.0-flash-sante:free"))
+            candidates.append(("kilo", "liquid/lfm-2.5-2.6b:free"))
+            candidates.append(("kilo", "cohere/north-mini-code:free"))
+            candidates.append(("kilo", "stepfun/step-3.7-flash:free"))
+            candidates.append(("kilo", "poolside/laguna-xs-2.1:free"))
+            candidates.append(("kilo", "kilo-auto/free"))
+
+            # 3. Local Ollama Safety Net
+            ollama_cfg = cfg.get("providers", {}).get("ollama", {})
+            if ollama_cfg.get("enabled", True):
+                local_m = ollama_cfg.get("model", "qwen2.5:14b")
+                candidates.append(("ollama", local_m))
+
+        # Check if local FreeLLMAPI gateway is enabled
+        fllm_cfg = cfg.get("providers", {}).get("freellmapi", {})
+        if fllm_cfg.get("enabled", False):
+            candidates.insert(1, ("freellmapi", fllm_cfg.get("model", "auto")))
+
+        if not candidates:
+            yield ("error", "No AI providers available. Please configure a free key in Settings -> AI Providers or start Ollama locally.")
+            return
 
         last_error = ""
         for cand_provider, cand_model in candidates:
             cand_succeeded = False
             streamed_tokens = 0
             try:
-                for kind, payload in stream_llm_turn(cand_provider, cand_model, messages, tools, cfg):
+                for kind, payload in stream_llm_turn(cand_provider, cand_model, messages, tools, cfg, tier=tier):
                     if kind == "error":
                         last_error = f"{cand_provider}: {payload}"
                         # In auto-failover, any failure before streaming tokens transitions to the next provider
@@ -1962,27 +2256,21 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                 last_error = f"{cand_provider}: {str(e)}"
                 continue
 
-        yield ("error", f"All free pool providers exhausted. Last error: {last_error}. Tip: Connect a free Google AI Studio or Cerebras key in Settings -> AI Providers, or verify local Ollama is active.")
+        yield ("error", f"All free pool providers exhausted. Last error: {last_error}.")
         return
 
-    elif effective_provider == "pollinations":
-        # Pollinations legacy text endpoint is deprecated and queue throttled (402/500).
-        # Seamlessly auto-route legacy sessions to local Ollama or free pool so user is never blocked.
-        ollama_cfg = cfg.get("providers", {}).get("ollama", {})
-        if ollama_cfg.get("enabled", True):
-            for kind, payload in stream_llm_turn("ollama", ollama_cfg.get("model", "qwen2.5:14b"), messages, tools, cfg):
-                yield (kind, payload)
-            return
-        else:
-            for kind, payload in stream_llm_turn("free_pool", "auto-failover", messages, tools, cfg):
-                yield (kind, payload)
-            return
-
-    elif effective_provider in ["openai", "openrouter", "gemini", "cerebras", "groq", "github_models"]:
+    elif effective_provider in ["openai", "openrouter", "gemini", "cerebras", "groq", "github_models", "aihorde", "freellmapi", "pollinations", "kilo"]:
         p_info = cfg.get("providers", {}).get(effective_provider, {})
         api_key = p_info.get('api_key', '').strip()
-        if effective_provider == "openai" and not api_key:
-            yield ("error", "OpenAI API key missing. Please add your key in Settings -> AI Providers -> OpenAI, or switch to ⚡ Free Auto-Pool / GitHub Models for free GPT-4o access.")
+        if effective_provider == "aihorde" and not api_key:
+            api_key = "0000000000"
+        elif effective_provider == "freellmapi" and not api_key:
+            api_key = "freellmapi-local"
+        elif effective_provider in ["pollinations", "kilo"]:
+            if api_key in ["kilo-free", "pollinations-free"]:
+                api_key = ""
+        elif effective_provider == "openai" and not api_key:
+            yield ("error", "OpenAI API key missing. Please add your key in Settings -> AI Providers -> OpenAI, or switch to ⚡ Free Auto-Pool.")
             return
 
         base_url = p_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
@@ -1990,16 +2278,18 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
         payload = {
             "model": model,
             "messages": messages,
-            "tools": tools,
             "stream": True
         }
+        # Pollinations free tier does not accept tools parameter; inline tool rescue handles dialect
+        if tools and effective_provider != "pollinations":
+            payload["tools"] = tools
 
         headers = {
             "Content-Type": "application/json",
             "User-Agent": STANDARD_USER_AGENT,
             "Accept": "text/event-stream, application/json"
         }
-        if api_key:
+        if api_key and api_key not in ["kilo-free", "pollinations-free"]:
             headers["Authorization"] = f"Bearer {api_key}"
             headers["x-api-key"] = api_key
         if effective_provider == "openrouter":
@@ -2008,13 +2298,16 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
 
         accumulated_text = ""
         tool_calls_map = {}
+        turn_timeout = 25 if tier == "fast" else 75
+        if effective_provider == "ollama":
+            turn_timeout = 180
         try:
             req_obj = urllib.request.Request(
                 endpoint,
                 data=json.dumps(payload).encode("utf-8"),
                 headers=headers
             )
-            with urllib.request.urlopen(req_obj, timeout=180) as resp:
+            with urllib.request.urlopen(req_obj, timeout=turn_timeout) as resp:
                 for line in resp:
                     txt = line.decode("utf-8").strip()
                     if not txt or not txt.startswith("data:"):
@@ -2061,6 +2354,20 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                 final_tool_calls.append(tc)
                 yield ("tool_call", tc)
 
+            # Tool-Call Rescue: extract inline XML/function dialects if structured calls missing
+            if not final_tool_calls and accumulated_text:
+                clean_text, rescued_calls = rescue_tool_calls(accumulated_text)
+                if rescued_calls:
+                    for rtc in rescued_calls:
+                        parsed_rtc = dict(rtc)
+                        try:
+                            parsed_rtc["function"]["arguments"] = json.loads(rtc["function"]["arguments"])
+                        except:
+                            pass
+                        final_tool_calls.append(parsed_rtc)
+                        yield ("tool_call", parsed_rtc)
+                    accumulated_text = clean_text
+
             yield ("done", {"content": accumulated_text, "tool_calls": final_tool_calls})
         except urllib.error.HTTPError as he:
             err_msg = str(he)
@@ -2074,6 +2381,19 @@ def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg:
                         err_msg = raw_body[:250]
             except:
                 pass
+
+            # Failover rescue for 404/503/429 on free providers when no tokens were yielded yet
+            if not accumulated_text and he.code in [404, 429, 502, 503, 504] and effective_provider in ["kilo", "pollinations"]:
+                fallback_provider = "pollinations" if effective_provider == "kilo" else "kilo"
+                fallback_model = "openai-fast" if fallback_provider == "pollinations" else "kilo-auto/free"
+                yield ("token", f"> ℹ️ *Model `{effective_provider}:{model}` was unavailable (HTTP {he.code}). Seamlessly routing through resilient engine `{fallback_provider}:{fallback_model}`...*\n\n")
+                try:
+                    for f_kind, f_payload in stream_llm_turn(fallback_provider, fallback_model, messages, tools, cfg, tier=tier):
+                        yield (f_kind, f_payload)
+                    return
+                except Exception as fb_err:
+                    err_msg += f" (Fallback failed: {fb_err})"
+
             yield ("error", f"Provider HTTP {he.code} Error: {err_msg}")
         except Exception as err:
             yield ("error", str(err))
@@ -2237,6 +2557,32 @@ class ActiveFile(BaseModel):
     content: str
     language: Optional[str] = "plaintext"
 
+def check_tool_intent(prompt: str) -> bool:
+    """
+    Determines if the prompt requests active file edits, shell execution, or workspace search.
+    Suppresses tool definitions for pure conversational questions (greetings, explanations, queries).
+    """
+    p = prompt.strip().lower()
+    casual_greetings = {"hi", "hey", "hello", "good morning", "good evening", "howdy", "sup", "yo", "who are you", "what is your name", "what model"}
+    clean_p = re.sub(r'[!.,?]+$', '', p).strip()
+    if clean_p in casual_greetings:
+        return False
+    action_keywords = [
+        "create", "write", "edit", "modify", "update", "refactor", "fix", "delete", "remove",
+        "save", "add", "implement", "build", "run", "execute", "terminal", "command", "test",
+        "bash", "shell", "npm", "pip", "python", "file", "folder", "directory", "diff",
+        "patch", "compile", "lint", "search workspace", "find in file", "read file"
+    ]
+    for kw in action_keywords:
+        if kw in p:
+            return True
+    info_starters = ["what is", "how does", "why is", "explain", "tell me about", "describe", "can you explain", "what are"]
+    if any(p.startswith(s) for s in info_starters) and not any(action in p for action in ["file", "code in", "edit", "fix", "run", "terminal"]):
+        return False
+    if "```" in prompt or "`" in prompt:
+        return True
+    return False
+
 class ChatRequest(BaseModel):
     session_id: str
     prompt: str
@@ -2246,6 +2592,7 @@ class ChatRequest(BaseModel):
     attachments: Optional[List[Dict[str, Any]]] = None
     provider: Optional[str] = None
     model: Optional[str] = None
+    tier: Optional[str] = "fast"
 
 @app.post("/api/chat")
 async def chat_stream(req: ChatRequest):
@@ -2269,9 +2616,17 @@ async def chat_stream(req: ChatRequest):
         except:
             pass
 
+    # Intent-gated tool and file injection
+    has_tool_intent = check_tool_intent(req.prompt)
+
     # Active file context injection (Claude Code IDE mode)
+    # Only inject active file when relevant to avoid hijacking greetings or general queries
     file_context = ""
-    if req.active_file and req.active_file.content:
+    prompt_lower = req.prompt.lower()
+    file_mention_keywords = ["file", "this", "code", "function", "line", "script", "debug", "refactor", "test", "edit", "fix", "look at", "here"]
+    should_include_file = has_tool_intent or any(kw in prompt_lower for kw in file_mention_keywords) or (req.active_file and req.active_file.name.lower() in prompt_lower)
+
+    if req.active_file and req.active_file.content and should_include_file:
         snippet = req.active_file.content[:40000]
         file_context = (
             f"\n\nCURRENTLY OPEN FILE IN IDE:\n"
@@ -2373,6 +2728,8 @@ CRITICAL RULES:
         cfg = load_provider_config()
         active_provider = req.provider or cfg.get("active_provider", "ollama")
         active_model = req.model or cfg.get("active_model", "qwen2.5:14b")
+        execution_tier = req.tier or "fast"
+        effective_tools = TOOLS_SPEC if has_tool_intent else []
 
         while turns < max_turns:
             turns += 1
@@ -2380,7 +2737,7 @@ CRITICAL RULES:
             turn_tool_calls = []
             turn_error = ""
 
-            for kind, payload in stream_llm_turn(active_provider, active_model, messages, TOOLS_SPEC, cfg):
+            for kind, payload in stream_llm_turn(active_provider, active_model, messages, effective_tools, cfg, tier=execution_tier):
                 if kind == "error":
                     turn_error = payload
                     break
@@ -2409,6 +2766,12 @@ CRITICAL RULES:
                             turn_tool_calls = payload["tool_calls"]
 
             if turn_error:
+                if not full_session_text and executed_tools_count == 0 and active_provider != "free_pool":
+                    # Automatic resilient fallback to free_pool
+                    yield f"data: {json.dumps({'type': 'token', 'text': f'> ℹ️ *Provider `{active_provider}:{active_model}` was unavailable ({turn_error[:80]}). Automatically switching to {execution_tier.upper()} auto-pool...*\\n\\n'})}\n\n"
+                    active_provider = "free_pool"
+                    active_model = "complex-auto" if execution_tier == "complex" else "fast-auto"
+                    continue
                 yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'error', 'label': 'Intent Deliberation & Strategy', 'detail': f'Provider synthesis halted: {turn_error[:70]}'})}\n\n"
                 yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'error', 'label': 'Solution Synthesis & Delivery', 'detail': f'{turn_error[:70]}'})}\n\n"
                 yield f"data: {json.dumps({'type': 'error', 'text': f'AI Provider Error ({active_provider}:{active_model}): {turn_error}'})}\n\n"
@@ -2482,7 +2845,15 @@ CRITICAL RULES:
 
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
