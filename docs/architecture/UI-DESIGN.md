@@ -1,6 +1,6 @@
 # IDE architecture and design system
 
-VexP Code is an Electron desktop application with a React and TypeScript renderer. The renderer is deliberately small at the document boundary: `frontend/index.html` mounts the application, while the workbench lives in typed components under `frontend/src`.
+CodeMate is an Electron desktop application with a React and TypeScript renderer. The renderer is deliberately small at the document boundary: `frontend/index.html` mounts the application, while the workbench lives in typed components under `frontend/src`.
 
 ## Workbench layout
 

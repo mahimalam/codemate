@@ -1,6 +1,6 @@
 # Agent harness architecture
 
-VexP Code uses one bounded run coordinator instead of a chain of planner, reviewer, and executor models. The coordinator owns run state, context limits, model routing, tool execution, recovery, and the final response.
+CodeMate uses one bounded run coordinator instead of a chain of planner, reviewer, and executor models. The coordinator owns run state, context limits, model routing, tool execution, recovery, and the final response.
 
 ```mermaid
 flowchart LR

@@ -1,4 +1,4 @@
-"""Typed, workspace-scoped tools used by the VexP agent runtime."""
+"""Typed, workspace-scoped tools used by the CodeMate agent runtime."""
 
 from __future__ import annotations
 
@@ -208,7 +208,7 @@ def _sandbox_command(command: str, workspace: Path, timeout_seconds: int) -> sub
         raise ToolError("command_required", "A non-empty command is required.")
     if sys.platform.startswith("linux") and shutil.which("bwrap"):
         args: str | list[str] = ["bwrap", "--die-with-parent", "--new-session", "--unshare-all", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--ro-bind", "/usr", "/usr", "--ro-bind", "/bin", "/bin", "--ro-bind", "/lib", "/lib", "--ro-bind-try", "/lib64", "/lib64", "--ro-bind", "/etc", "/etc", "--bind", str(workspace), str(workspace), "--chdir", str(workspace), "--setenv", "HOME", "/tmp", "--setenv", "PATH", os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "/bin/sh", "-lc", command]
-    elif os.environ.get("VEXP_ALLOW_UNSANDBOXED_AGENT_COMMANDS") == "1":
+    elif os.environ.get("CODEMATE_ALLOW_UNSANDBOXED_AGENT_COMMANDS") == "1":
         args = command if sys.platform == "win32" else ["/bin/sh", "-lc", command]
     else:
         raise ToolError("sandbox_unavailable", "Agent command execution is disabled because no supported sandbox is available.", "Use the interactive terminal, or explicitly enable the documented unsandboxed mode.", "Do not retry until execution policy changes.")
@@ -253,7 +253,7 @@ def execute_agent_tool(name: str, args: Dict[str, Any], workspace: str) -> Dict[
             return _result("success", f"Found {len(results)} web results for {query!r}.", data={"query": query, "results": results, "count": len(results)}, duration_ms=int((time.monotonic() - started) * 1000))
         if name == "fetch_web_page":
             url = _public_web_url(str(args.get("url") or ""))
-            request = urllib.request.Request(url, headers={"User-Agent": "VexP-Code/2.6 (+local IDE)", "Accept": "text/html,text/plain,application/json;q=0.9"})
+            request = urllib.request.Request(url, headers={"User-Agent": "CodeMate/2.6 (+local IDE)", "Accept": "text/html,text/plain,application/json;q=0.9"})
             opener = urllib.request.build_opener(_PublicRedirectHandler())
             with opener.open(request, timeout=15) as response:
                 final_url = _public_web_url(response.geturl())

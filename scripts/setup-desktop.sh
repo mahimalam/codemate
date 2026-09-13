@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Setup Desktop Launcher for Linux
-# Generates ~/.local/share/applications/vexp-code-ide.desktop with user's actual path
+# Generates ~/.local/share/applications/codemate.desktop with the user's actual path
 # ==============================================================================
 set -e
 
@@ -11,28 +11,28 @@ DESKTOP_DIR="$HOME/Desktop"
 
 mkdir -p "$APP_DIR"
 
-cat <<EOF > "$APP_DIR/vexp-code-ide.desktop"
+cat <<EOF > "$APP_DIR/codemate.desktop"
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=VexP Code IDE
+Name=CodeMate
 GenericName=AI Code IDE
 Comment=AI coding workspace with controlled agent tools
 Exec=$DIR/scripts/launch-ide.sh
 Icon=$DIR/assets/icon.png
 Terminal=false
 Categories=Development;IDE;
-StartupWMClass=VexP Code IDE
+StartupWMClass=CodeMate
 StartupNotify=true
 Keywords=ide;ai;code;agent;harness;
 EOF
 
-chmod +x "$APP_DIR/vexp-code-ide.desktop"
+chmod +x "$APP_DIR/codemate.desktop"
 
 # Also place on Desktop if ~/Desktop exists
 if [ -d "$DESKTOP_DIR" ]; then
-  cp "$APP_DIR/vexp-code-ide.desktop" "$DESKTOP_DIR/"
-  chmod +x "$DESKTOP_DIR/vexp-code-ide.desktop"
+  cp "$APP_DIR/codemate.desktop" "$DESKTOP_DIR/"
+  chmod +x "$DESKTOP_DIR/codemate.desktop"
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -40,4 +40,4 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 echo "Desktop launcher installed successfully."
-echo "You can now launch 'VexP Code IDE' from your application menu or desktop."
+echo "You can now launch 'CodeMate' from your application menu or desktop."

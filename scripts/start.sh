@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VexP Code IDE - Launcher Script
+# CodeMate - Launcher Script
 # ==============================================================================
 set -e
 
@@ -26,7 +26,7 @@ if [ ! -f "${ROOT_DIR}/frontend/dist/index.html" ]; then
 fi
 
 echo "=================================================="
-echo "  Starting VexP Code IDE...                       "
+echo "  Starting CodeMate...                            "
 echo "  URL: http://${HOST}:${PORT}                     "
 echo "=================================================="
 

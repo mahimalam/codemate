@@ -1,13 +1,13 @@
 @echo off
 REM ==============================================================================
-REM  VexP Code IDE - Windows installer
+REM  CodeMate - Windows installer
 REM ==============================================================================
 
 setlocal enabledelayedexpansion
-title VexP Code IDE - Setup
+title CodeMate - Setup
 
 echo ==================================================
-echo   VexP Code IDE
+echo   CodeMate
 echo ==================================================
 echo.
 

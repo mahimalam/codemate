@@ -13,8 +13,8 @@ except ImportError:
     from model_catalog import COMPLEX_KILO_MODELS, FAST_KILO_MODELS
 
 
-STANDARD_USER_AGENT = "VexP-IDE/3"
-OPENAI_COMPATIBLE = {"openai", "openrouter", "gemini", "cerebras", "groq", "github_models", "aihorde", "freellmapi", "pollinations", "kilo"}
+STANDARD_USER_AGENT = "CodeMate/3"
+OPENAI_COMPATIBLE = {"openai", "openrouter", "gemini", "cerebras", "groq", "github_models", "aihorde", "pollinations", "kilo"}
 
 
 def _event(kind: str, payload: Any):
@@ -138,7 +138,7 @@ def _stream_openai(protocol: str, model: str, messages: list[dict], tools: list[
         if protocol in {"gemini", "anthropic"}:
             headers["x-api-key"] = api_key
     if protocol == "openrouter":
-        headers.update({"HTTP-Referer": "https://github.com/vexp/claude-code-ide", "X-Title": "VexP Code IDE"})
+        headers.update({"HTTP-Referer": "https://github.com/mahimalam/codemate", "X-Title": "CodeMate"})
     accumulated = ""
     call_parts: dict[int, dict] = {}
     timeout = 30 if tier == "fast" else 120
@@ -259,9 +259,6 @@ def _candidates(cfg: dict, tier: str, local_only: bool, requires_tools: bool = F
         if not local_only and profile.get("enabled") and profile.get("api_key") and profile.get("model"):
             candidates.append((provider, profile["model"]))
     if not local_only:
-        gateway = providers.get("freellmapi", {})
-        if gateway.get("enabled"):
-            candidates.append(("freellmapi", "auto:fast" if tier == "fast" else "auto:smart"))
         kilo = providers.get("kilo", {})
         kilo_models = FAST_KILO_MODELS if tier == "fast" else COMPLEX_KILO_MODELS
         if kilo.get("enabled"):

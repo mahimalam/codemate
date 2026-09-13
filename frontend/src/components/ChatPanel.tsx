@@ -24,7 +24,7 @@ type WebMode = 'off' | 'auto' | 'research';
 
 function Message({ message }: { message: ChatMessage }) {
   return <article className={`message ${message.role}`}>
-    <div className="message-role">{message.role === 'assistant' ? <><Bot />VexP</> : 'You'}</div>
+    <div className="message-role">{message.role === 'assistant' ? <><Bot />CodeMate</> : 'You'}</div>
     <div className="message-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
   </article>;
 }
@@ -35,11 +35,11 @@ export function ChatPanel({ workspace, activeFile, onFileUpdated, onOpenSettings
   const [model, setModel] = useState('');
   const [tier, setTier] = useState<'fast' | 'complex'>('fast');
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(() => {
-    const saved = window.localStorage.getItem('vexp-command-access');
+    const saved = window.localStorage.getItem('codemate-command-access');
     return saved === 'workspace' || saved === 'whole_device' ? saved : 'ask';
   });
   const [webMode, setWebMode] = useState<WebMode>(() => {
-    const saved = window.localStorage.getItem('vexp-web-mode');
+    const saved = window.localStorage.getItem('codemate-web-mode');
     return saved === 'off' || saved === 'research' ? saved : 'auto';
   });
   const [localOnly, setLocalOnly] = useState(false);
@@ -70,8 +70,8 @@ export function ChatPanel({ workspace, activeFile, onFileUpdated, onOpenSettings
       setModels(value); setTier(initialTier); setProvider(selected?.provider || 'free_pool'); setModel(selected?.model || 'fast-auto');
     }).catch(() => undefined);
   }, [modelVersion]);
-  useEffect(() => { window.localStorage.setItem('vexp-command-access', approvalPolicy); }, [approvalPolicy]);
-  useEffect(() => { window.localStorage.setItem('vexp-web-mode', webMode); }, [webMode]);
+  useEffect(() => { window.localStorage.setItem('codemate-command-access', approvalPolicy); }, [approvalPolicy]);
+  useEffect(() => { window.localStorage.setItem('codemate-web-mode', webMode); }, [webMode]);
   useEffect(() => {
     if (!requestedSession) return;
     api.get<{ id: string; messages?: ChatMessage[] }>(`/api/history/${encodeURIComponent(requestedSession)}`).then((session) => {
@@ -184,7 +184,7 @@ export function ChatPanel({ workspace, activeFile, onFileUpdated, onOpenSettings
 
   const selectedModel = modelList.find((entry) => entry.provider === provider && entry.model === model);
   if (collapsed) return <aside className="chat-panel chat-collapsed" aria-label="Collapsed agent panel">
-    <button className="collapsed-agent" onClick={onExpand} title="Expand VexP Agent" aria-label="Expand VexP Agent"><Sparkles /><span>Agent</span></button>
+    <button className="collapsed-agent" onClick={onExpand} title="Expand CodeMate" aria-label="Expand CodeMate"><Sparkles /><span>CodeMate</span></button>
     <button className="collapsed-selection" onClick={onExpand} title={`${tier === 'fast' ? 'Fast reply' : 'Complex work'} · ${selectedModel?.name || model}`} aria-label={`${tier === 'fast' ? 'Fast reply' : 'Complex work'} using ${selectedModel?.name || model}`}>
       {tier === 'fast' ? <Zap /> : <BrainCircuit />}<span>{tier === 'fast' ? 'Fast' : 'Complex'}</span><small>{selectedModel?.name || model || 'Auto'}</small>
     </button>
@@ -193,10 +193,10 @@ export function ChatPanel({ workspace, activeFile, onFileUpdated, onOpenSettings
 
   return <aside className="chat-panel" aria-label="Agent chat">
     <div className="panel-resizer chat-resizer" role="separator" aria-label="Resize agent panel" aria-orientation="vertical" tabIndex={0} onPointerDown={onResizeStart} onKeyDown={(event) => { if (event.key === 'ArrowLeft') onResize(16); if (event.key === 'ArrowRight') onResize(-16); }} />
-    <header className="chat-header"><div><Sparkles /><strong>VexP Agent</strong><span className="status-dot" title="Harness ready" /></div><div><button className="icon-button" onClick={freshSession} title="New chat" aria-label="New chat"><Plus /></button><button className="icon-button" onClick={onOpenSettings} title="Provider settings" aria-label="Provider settings"><Settings2 /></button><button className="icon-button" onClick={onCollapse} title="Collapse agent" aria-label="Collapse agent"><PanelRightClose /></button></div></header>
+    <header className="chat-header"><div><Sparkles /><strong>CodeMate</strong><span className="status-dot" title="Harness ready" /></div><div><button className="icon-button" onClick={freshSession} title="New chat" aria-label="New chat"><Plus /></button><button className="icon-button" onClick={onOpenSettings} title="Provider settings" aria-label="Provider settings"><Settings2 /></button><button className="icon-button" onClick={onCollapse} title="Collapse agent" aria-label="Collapse agent"><PanelRightClose /></button></div></header>
     <div className="chat-context"><span>File context</span><strong>{activeFile?.name || 'No active file'}</strong></div>
     <div className="chat-scroll-shell"><div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
-      {!messages.length && <div className="chat-welcome"><div className="agent-glyph"><Sparkles /></div><h2>VexP Code AI Ready</h2><p>Autonomous software engineering across local and free cloud models. Ask questions, request edits, or run terminal commands.</p><div className="trust-row"><ShieldCheck /> Access follows your command policy</div></div>}
+      {!messages.length && <div className="chat-welcome"><div className="agent-glyph"><Sparkles /></div><h2>CodeMate is ready</h2><p>Autonomous software engineering across local and free cloud models. Ask questions, request edits, or run terminal commands.</p><div className="trust-row"><ShieldCheck /> Access follows your command policy</div></div>}
       {messages.map((message, index) => <Message key={`${message.role}-${index}`} message={message} />)}
       {(running || steps.length > 0 || runError) && <div className={`run-card ${running ? 'running' : ''} ${runError ? 'failed' : ''} ${runExpanded ? 'expanded' : 'collapsed'}`}>
         <button type="button" className="run-card-title" onClick={() => setRunExpanded((value) => !value)} aria-expanded={runExpanded}><span className="pulse-orb" /><strong>{running ? 'Working' : runError ? 'Run stopped' : 'Run complete'}</strong><small>{running ? 'Agent is processing' : runError || `${steps.filter((step) => step.status === 'done').length} steps`}</small>{running && <span className="thinking-wave"><i /><i /><i /></span>}{runExpanded ? <ChevronDown /> : <ChevronRight />}</button>
@@ -210,7 +210,7 @@ export function ChatPanel({ workspace, activeFile, onFileUpdated, onOpenSettings
     </div>{showJump && <button type="button" className="jump-latest" onClick={jumpToLatest}><ArrowDown />Latest</button>}</div>
     <form className="composer" onSubmit={send}>
       {attachments.length > 0 && <div className="context-row">{attachments.map((item) => <button type="button" className="context-chip" key={item.name} onClick={() => setAttachments((items) => items.filter((candidate) => candidate !== item))}><Paperclip />{item.name}<X /></button>)}</div>}
-      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder={workspace ? 'Ask VexP Agent about your project…' : 'Ask VexP Agent, or open a workspace for file tools…'} rows={2} />
+      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder={workspace ? 'Ask CodeMate about your project…' : 'Ask CodeMate, or open a workspace for file tools…'} rows={2} />
       <div className="composer-controls">
         <div className="composer-left">
           <label className="chip-button attach-button" title="Attach files"><Paperclip />Attach<input className="visually-hidden" type="file" multiple onChange={(event) => { void attachFiles(event.target.files); event.target.value = ''; }} /></label>

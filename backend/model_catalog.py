@@ -80,11 +80,6 @@ def build_model_catalog(cfg: dict, local_models: list[dict[str, Any]]) -> tuple[
     fast = [dict(item, tier="fast") for item in FAST_MODELS]
     complex_models = [dict(item, tier="complex") for item in COMPLEX_MODELS]
 
-    gateway = providers.get("freellmapi", {})
-    if gateway.get("enabled"):
-        fast.append(dict(_model("freellmapi", "auto:fast", "FreeLLMAPI Fast Router", "34-provider gateway", "Uses the locally configured FreeLLMAPI router's speed strategy."), tier="fast"))
-        complex_models.append(dict(_model("freellmapi", "auto:smart", "FreeLLMAPI Smart Router", "34-provider gateway", "Uses the locally configured FreeLLMAPI router's intelligence strategy."), tier="complex"))
-
     configured = {
         "gemini": ("Google Gemini", "Cloud free tier"),
         "cerebras": ("Cerebras", "Cloud free tier"),

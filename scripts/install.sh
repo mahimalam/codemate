@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VexP Code - Linux installer
+# CodeMate - Linux installer
 # ==============================================================================
 set -e
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "=================================================="
-echo "  VexP Code IDE                                "
+echo "  CodeMate                                     "
 echo "=================================================="
 echo ""
 
@@ -79,7 +79,7 @@ echo "=================================================="
 echo "  Installation Successful!                        "
 echo "=================================================="
 echo "To launch as Native Desktop IDE:"
-echo "    npm start   (or click 'VexP Code IDE' on your desktop)"
+echo "    npm start   (or click 'CodeMate' on your desktop)"
 echo ""
 echo "To launch in Web Browser mode:"
 echo "    ./scripts/start.sh"

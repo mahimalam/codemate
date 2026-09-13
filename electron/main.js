@@ -20,7 +20,7 @@ try {
   console.warn('Could not read branding.json, using defaults:', e.message);
 }
 
-const APP_NAME = branding.app?.name || 'VexP Code IDE';
+const APP_NAME = branding.app?.name || 'CodeMate';
 const HOST = branding.server?.host || '127.0.0.1';
 let port = branding.server?.port || 7860;
 let serverUrl = `http://${HOST}:${port}`;
@@ -38,7 +38,7 @@ let isQuitting = false;
  */
 function checkServerHealth() {
   return new Promise((resolve) => {
-    const req = http.get(`${serverUrl}/api/version`, { headers: { 'X-Vexp-Token': SESSION_TOKEN } }, (res) => {
+    const req = http.get(`${serverUrl}/api/version`, { headers: { 'X-Codemate-Token': SESSION_TOKEN } }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
@@ -113,7 +113,7 @@ async function startBackendServer() {
     stdio: ['ignore', out, out],
     detached: false,
     shell: false,
-    env: { ...process.env, HOST, PORT: String(port), VEXP_SESSION_TOKEN: SESSION_TOKEN }
+    env: { ...process.env, HOST, PORT: String(port), CODEMATE_SESSION_TOKEN: SESSION_TOKEN }
   });
   fs.closeSync(out);
 

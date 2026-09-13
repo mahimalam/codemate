@@ -2,19 +2,19 @@
   "_comment": "Edit this file to fully customize the IDE branding, name, and defaults.",
 
   "app": {
-    "name": "VexP Code IDE",
-    "short_name": "VexP Code",
-    "tagline": "AI coding workspace with controlled agent tools",
+    "name": "CodeMate",
+    "short_name": "CodeMate",
+    "tagline": "Your AI coding workspace",
     "version": "2.6.0",
     "author": "mahimalam",
-    "github_url": "https://github.com/mahimalam/vexp-code-ide"
+    "github_url": "https://github.com/mahimalam/codemate"
   },
 
   "agent": {
-    "name": "VexP Agent",
-    "welcome_message": "VexP Code AI Ready",
-    "input_placeholder": "Ask VexP Agent about your project...",
-    "terminal_prompt": "vexp $"
+    "name": "CodeMate",
+    "welcome_message": "CodeMate is ready",
+    "input_placeholder": "Ask CodeMate about your project...",
+    "terminal_prompt": "codemate $"
   },
 
   "server": {

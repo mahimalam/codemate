@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const developmentHeaders = { 'X-Vexp-Token': 'vexp-dev-session' };
+const developmentHeaders = { 'X-Codemate-Token': 'codemate-dev-session' };
 
 export default defineConfig({
   plugins: [react()],

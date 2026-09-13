@@ -1,1 +1,1 @@
-"""VexP IDE backend package."""
+"""CodeMate IDE backend package."""

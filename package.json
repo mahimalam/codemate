@@ -1,6 +1,6 @@
 {
-  "name": "vexp-code-ide",
-  "desktopName": "vexp-code-ide.desktop",
+  "name": "codemate",
+  "desktopName": "codemate.desktop",
   "version": "2.6.0",
   "description": "Desktop AI coding IDE with local and cloud models, web research, Git, and controlled agent tools.",
   "main": "electron/main.js",
@@ -26,8 +26,8 @@
     "local-ai"
   ],
   "author": {
-    "name": "VexP",
-    "email": "noreply@vexp.local"
+    "name": "CodeMate",
+    "email": "noreply@codemate.local"
   },
   "license": "MIT",
   "devDependencies": {
@@ -51,8 +51,8 @@
     "vite": "^8.2.2"
   },
   "build": {
-    "appId": "com.vexp.codeide",
-    "productName": "VexP Code IDE",
+    "appId": "com.codemate.app",
+    "productName": "CodeMate",
     "files": ["electron/**/*", "package.json"],
     "extraResources": [
       { "from": "backend", "to": "backend", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },

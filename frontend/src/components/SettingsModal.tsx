@@ -7,7 +7,7 @@ type CustomProvider = Provider & { id: string; name: string; type: 'openai' | 'a
 type Config = { providers?: Record<string, Provider>; custom_providers?: CustomProvider[]; active_provider?: string; active_model?: string };
 type TestState = { state: 'testing' | 'success' | 'error'; message: string };
 
-const FREE_IDS = new Set(['ollama', 'gemini', 'cerebras', 'groq', 'pollinations', 'kilo', 'aihorde', 'freellmapi']);
+const FREE_IDS = new Set(['ollama', 'gemini', 'cerebras', 'groq', 'pollinations', 'kilo', 'aihorde']);
 const PAID_IDS = new Set(['openrouter', 'openai', 'anthropic']);
 
 function Fields({ provider, onChange, keyless = false }: { provider: Provider; onChange: (patch: Partial<Provider>) => void; keyless?: boolean }) {

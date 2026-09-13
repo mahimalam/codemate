@@ -1,10 +1,10 @@
 @echo off
 REM ==============================================================================
-REM  VexP Code IDE - Windows Launcher Script
+REM  CodeMate - Windows Launcher Script
 REM ==============================================================================
 
 setlocal enabledelayedexpansion
-title VexP Code IDE
+title CodeMate
 
 set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
@@ -16,10 +16,10 @@ if exist ".venv\Scripts\activate.bat" (
 
 where npm >nul 2>nul
 if %errorlevel% equ 0 (
-    echo Starting VexP Code IDE (Desktop Mode)...
+    echo Starting CodeMate (Desktop Mode)...
     call npm start
 ) else (
-    echo Starting VexP Code IDE (Web Mode on http://127.0.0.1:7860)...
+    echo Starting CodeMate (Web Mode on http://127.0.0.1:7860)...
     python backend\server.py
 )
 

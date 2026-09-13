@@ -45,7 +45,7 @@ type Props = {
 };
 
 const configure: BeforeMount = (monaco) => {
-  monaco.editor.defineTheme('vexp-dark', {
+  monaco.editor.defineTheme('codemate-dark', {
     base: 'vs-dark', inherit: true,
     rules: [
       { token: 'comment', foreground: '667085', fontStyle: 'italic' },
@@ -74,7 +74,7 @@ export function EditorPane({ tabs, activePath, onActivate, onChange, onClose, on
     </div>}
     {active ? <>
       <div className="editor-toolbar"><span className="breadcrumb">{active.path}</span><div><button className="tool-button" onClick={() => onRun(active.path)}><Play />Run</button><button className="tool-button primary" disabled={active.content === active.saved} onClick={() => onSave(active.path)}><Save />Save</button></div></div>
-      <div className="monaco-wrap"><Editor path={active.path} value={active.content} language={languageForPath(active.path)} theme="vexp-dark" beforeMount={configure} onMount={mount} onChange={(value) => onChange(active.path, value || '')} options={{ fontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace", fontSize: 13, lineHeight: 21, minimap: { enabled: true }, padding: { top: 16 }, smoothScrolling: true, cursorSmoothCaretAnimation: 'on', bracketPairColorization: { enabled: true }, guides: { bracketPairs: true }, renderWhitespace: 'selection', automaticLayout: true }} /> </div>
-    </> : <div className="editor-empty"><div className="mark"><BrandIcon /></div><h1>VexP Code</h1><p>Open a file from Explorer or ask the agent to inspect your workspace.</p><div className="shortcuts"><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick open</span><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div></div>}
+      <div className="monaco-wrap"><Editor path={active.path} value={active.content} language={languageForPath(active.path)} theme="codemate-dark" beforeMount={configure} onMount={mount} onChange={(value) => onChange(active.path, value || '')} options={{ fontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace", fontSize: 13, lineHeight: 21, minimap: { enabled: true }, padding: { top: 16 }, smoothScrolling: true, cursorSmoothCaretAnimation: 'on', bracketPairColorization: { enabled: true }, guides: { bracketPairs: true }, renderWhitespace: 'selection', automaticLayout: true }} /> </div>
+    </> : <div className="editor-empty"><div className="mark"><BrandIcon /></div><h1>CodeMate</h1><p>Open a file from Explorer or ask the agent to inspect your workspace.</p><div className="shortcuts"><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick open</span><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div></div>}
   </main>;
 }

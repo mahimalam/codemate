@@ -1,4 +1,4 @@
-# Contributing to VexP Code
+# Contributing to CodeMate
 
 ## Local setup
 

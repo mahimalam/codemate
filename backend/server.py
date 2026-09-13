@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSO
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-app = FastAPI(title="VexP Code IDE")
+app = FastAPI(title="CodeMate")
 
 SERVER_START_TIME = time.time()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +46,7 @@ if os.path.isdir(FRONTEND_ASSETS_DIR):
     app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="assets")
 
 # ── User config directory (never committed to git) ─────────────────────────
-CONFIG_DIR = os.path.abspath(os.path.expanduser(os.environ.get("VEXP_CONFIG_DIR", "~/.claude_code_ide")))
+CONFIG_DIR = os.path.abspath(os.path.expanduser(os.environ.get("CODEMATE_CONFIG_DIR", "~/.codemate")))
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
 DEFAULT_STORAGE_DIR = os.path.join(CONFIG_DIR, "storage")
@@ -56,8 +56,8 @@ WORKSPACE_CONFIG_FILE = os.path.join(CONFIG_DIR, "active_workspace.json")
 RECENT_WORKSPACES_FILE = os.path.join(CONFIG_DIR, "recent_workspaces.json")
 PROVIDER_CONFIG_FILE = os.path.join(CONFIG_DIR, "provider_config.json")
 GITHUB_CONFIG_FILE = os.path.join(CONFIG_DIR, "github.json")
-DATABASE_FILE = os.path.join(CONFIG_DIR, "vexp.db")
-APP_SESSION_TOKEN = os.environ.get("VEXP_SESSION_TOKEN") or secrets.token_urlsafe(32)
+DATABASE_FILE = os.path.join(CONFIG_DIR, "codemate.db")
+APP_SESSION_TOKEN = os.environ.get("CODEMATE_SESSION_TOKEN") or secrets.token_urlsafe(32)
 try:
     os.chmod(CONFIG_DIR, 0o700)
 except OSError:
@@ -103,13 +103,13 @@ async def protect_local_api(request: Request, call_next):
         origin_host = urlparse(origin).netloc
         if origin_host != request.headers.get("host"):
             return JSONResponse(status_code=403, content={"error": "invalid_origin"})
-    public_path = request.url.path in {"/", "/vexp.svg"} or request.url.path.startswith("/assets/")
-    supplied = request.headers.get("x-vexp-token") or request.cookies.get("vexp_session")
+    public_path = request.url.path in {"/", "/codemate.svg"} or request.url.path.startswith("/assets/")
+    supplied = request.headers.get("x-codemate-token") or request.cookies.get("codemate_session")
     if not public_path and not secrets.compare_digest(supplied or "", APP_SESSION_TOKEN):
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
     response = await call_next(request)
     if request.url.path == "/":
-        response.set_cookie("vexp_session", APP_SESSION_TOKEN, httponly=True, samesite="strict", secure=False, path="/")
+        response.set_cookie("codemate_session", APP_SESSION_TOKEN, httponly=True, samesite="strict", secure=False, path="/")
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -181,14 +181,6 @@ def default_provider_config():
                 "is_free": True,
                 "tier_info": "100% Free Anonymous Community Grid (Keyless)"
             },
-            "freellmapi": {
-                "base_url": "http://localhost:3001/v1",
-                "api_key": "freellmapi-local",
-                "model": "auto",
-                "enabled": False,
-                "is_free": True,
-                "tier_info": "34 Free Providers / 635 Endpoints via Local Gateway"
-            },
             "openrouter": {
                 "base_url": "https://openrouter.ai/api/v1",
                 "api_key": "",
@@ -257,8 +249,6 @@ def load_provider_config() -> dict:
                 for p_key, p_val in data.get("providers", {}).items():
                     if p_key in d["providers"]:
                         d["providers"][p_key].update(p_val)
-                    else:
-                        d["providers"][p_key] = p_val
                 d["custom_providers"] = data.get("custom_providers", [])
                 sanitized = sanitize_provider_config(d)
                 if sanitized:
@@ -321,10 +311,10 @@ def github_git_environment() -> dict:
         return env
     if sys.platform == "win32":
         helper = os.path.join(CONFIG_DIR, "github-askpass.cmd")
-        content = '@echo off\r\necho %1 | findstr /I "Username" >nul\r\nif %errorlevel%==0 (echo x-access-token) else (echo %VEXP_GITHUB_TOKEN%)\r\n'
+        content = '@echo off\r\necho %1 | findstr /I "Username" >nul\r\nif %errorlevel%==0 (echo x-access-token) else (echo %CODEMATE_GITHUB_TOKEN%)\r\n'
     else:
         helper = os.path.join(CONFIG_DIR, "github-askpass.sh")
-        content = '#!/bin/sh\ncase "$1" in *Username*) printf "%s" "x-access-token" ;; *) printf "%s" "$VEXP_GITHUB_TOKEN" ;; esac\n'
+        content = '#!/bin/sh\ncase "$1" in *Username*) printf "%s" "x-access-token" ;; *) printf "%s" "$CODEMATE_GITHUB_TOKEN" ;; esac\n'
     current = ""
     try:
         with open(helper, "r", encoding="utf-8") as handle:
@@ -335,7 +325,7 @@ def github_git_environment() -> dict:
         with open(helper, "w", encoding="utf-8", newline="") as handle:
             handle.write(content)
     os.chmod(helper, 0o700)
-    env.update({"GIT_ASKPASS": helper, "GIT_ASKPASS_REQUIRE": "force", "GIT_TERMINAL_PROMPT": "0", "VEXP_GITHUB_TOKEN": token})
+    env.update({"GIT_ASKPASS": helper, "GIT_ASKPASS_REQUIRE": "force", "GIT_TERMINAL_PROMPT": "0", "CODEMATE_GITHUB_TOKEN": token})
     return env
 
 
@@ -345,7 +335,7 @@ def clean_git_output(value: str) -> str:
 
 def fetch_ollama_models(base_url: str = "http://127.0.0.1:11434") -> List[Dict[str, Any]]:
     try:
-        req = urllib.request.Request(f"{base_url.rstrip('/')}/api/tags", headers={"User-Agent": "VexP-IDE"})
+        req = urllib.request.Request(f"{base_url.rstrip('/')}/api/tags", headers={"User-Agent": "CodeMate"})
         with urllib.request.urlopen(req, timeout=4) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = []
@@ -1153,7 +1143,7 @@ def write_file(payload: WriteFilePayload):
         parent = os.path.dirname(full_path)
         if parent and not os.path.exists(parent):
             os.makedirs(parent, exist_ok=True)
-        descriptor, temporary_path = tempfile.mkstemp(prefix=".vexp-save-", dir=parent or ".")
+        descriptor, temporary_path = tempfile.mkstemp(prefix=".codemate-save-", dir=parent or ".")
         try:
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(encoded)
@@ -1175,7 +1165,7 @@ def write_file(payload: WriteFilePayload):
 # ---------------------------------------------------------------------
 @app.websocket("/ws/terminal")
 async def terminal_websocket_endpoint(websocket: WebSocket, cwd: Optional[str] = Query(None)):
-    supplied = websocket.headers.get("x-vexp-token") or websocket.cookies.get("vexp_session")
+    supplied = websocket.headers.get("x-codemate-token") or websocket.cookies.get("codemate_session")
     origin = websocket.headers.get("origin", "")
     if not secrets.compare_digest(supplied or "", APP_SESSION_TOKEN) or (origin and urlparse(origin).netloc != websocket.headers.get("host")):
         await websocket.close(code=4401, reason="Unauthorized")
@@ -1719,7 +1709,7 @@ def probe_provider_endpoint(payload: ProbeProviderPayload):
     # 1. Test Ollama
     if protocol in ["auto", "ollama"] or ":11434" in raw_url:
         try:
-            req = urllib.request.Request(f"{raw_url}/api/tags", headers={"User-Agent": "VexP-IDE"})
+            req = urllib.request.Request(f"{raw_url}/api/tags", headers={"User-Agent": "CodeMate"})
             with urllib.request.urlopen(req, timeout=4) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name") for m in data.get("models", []) if m.get("name")]
@@ -2024,9 +2014,9 @@ async def serve_ui():
     return response
 
 
-@app.get("/vexp.svg", include_in_schema=False)
+@app.get("/codemate.svg", include_in_schema=False)
 def serve_favicon():
-    path = os.path.join(FRONTEND_DIST_DIR, "vexp.svg")
+    path = os.path.join(FRONTEND_DIST_DIR, "codemate.svg")
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Icon build artifact is missing")
     return FileResponse(path, media_type="image/svg+xml")

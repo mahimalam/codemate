@@ -21,7 +21,7 @@ export function TerminalPane({ cwd, onClose, commandRequest }: { cwd: string | n
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${protocol}//${location.host}/ws/terminal?cwd=${encodeURIComponent(cwd || '')}`);
     socketRef.current = socket;
-    socket.onopen = () => { instance.writeln('\x1b[38;2;139;156;255mVexP terminal connected\x1b[0m'); fit.fit(); };
+    socket.onopen = () => { instance.writeln('\x1b[38;2;139;156;255mCodeMate terminal connected\x1b[0m'); fit.fit(); };
     socket.onmessage = async (event) => instance.write(typeof event.data === 'string' ? event.data : await event.data.text());
     socket.onclose = () => instance.writeln('\r\n\x1b[38;2;240;113;120mTerminal disconnected\x1b[0m');
     const dataListener = instance.onData((data) => { if (socket.readyState === WebSocket.OPEN) socket.send(new TextEncoder().encode(data)); });

@@ -1,10 +1,10 @@
-# VexP Code
+# CodeMate
 
-VexP Code is a desktop AI coding workspace for Linux and Windows. It combines a Monaco editor, terminal, Git controls, persistent agent sessions, web research, and local or cloud model providers behind a FastAPI service.
+CodeMate is a desktop AI coding workspace for Linux and Windows. It combines a Monaco editor, terminal, Git controls, persistent agent sessions, web research, and local or cloud model providers behind a FastAPI service.
 
 The agent is built for supervised software work. Workspace file tools remain confined to the project you open, Linux workspace commands use a network-isolated Bubblewrap sandbox, and each run has clear turn, tool, and time limits with preserved progress.
 
-## What VexP Code includes
+## What CodeMate includes
 
 - React and TypeScript workbench with Monaco, xterm, Git, Explorer, search, and agent chat
 - GitHub account connection for the active repository, with explicit pull and push controls
@@ -54,7 +54,7 @@ npm start
 For browser development, run the backend and Vite separately:
 
 ```bash
-VEXP_SESSION_TOKEN=vexp-dev-session python3 backend/server.py
+CODEMATE_SESSION_TOKEN=codemate-dev-session python3 backend/server.py
 npm run dev
 ```
 
@@ -83,8 +83,6 @@ Provider settings are available from the workbench. The backend supports:
 The selectable free catalog is split by task intent. Fast reply starts with low-latency models, while Complex work starts with larger reasoning and long-context models. Each route has bounded model-level failover. An automatic route resolves one concrete model at the start of a run and keeps it pinned; explicit model selection also stays pinned.
 
 For agentic work, automatic routes only select providers that can return structured tool calls. Answer-only fallback providers remain available for normal chat, but they are never presented as capable of editing files or running tools.
-
-[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) can also be enabled as a local 34-provider gateway. VexP maps Fast reply to `auto:fast` and Complex work to `auto:smart`, following FreeLLMAPI's routing API.
 
 API keys stay in the local provider configuration. Settings responses expose only a masked key indicator. Custom endpoints are called directly and preserve the selected provider protocol.
 
