@@ -1,13 +1,13 @@
 @echo off
 REM ==============================================================================
-REM  VexP Code IDE - Windows 1-Click Installer
+REM  VexP Code IDE - Windows installer
 REM ==============================================================================
 
 setlocal enabledelayedexpansion
 title VexP Code IDE - Setup
 
 echo ==================================================
-echo   VexP Code IDE - Autonomous AI Coding Harness    
+echo   VexP Code IDE
 echo ==================================================
 echo.
 
@@ -28,6 +28,12 @@ if %errorlevel% neq 0 (
 
 echo [+] Using Python command: !PY_CMD!
 !PY_CMD! -c "import sys; print(f'[+] Detected Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+!PY_CMD! -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+if !errorlevel! neq 0 (
+    echo [ERROR] Python 3.10 or newer is required.
+    pause
+    exit /b 1
+)
 
 REM 2. Setup Virtual Environment in .venv
 set SCRIPT_DIR=%~dp0
@@ -54,8 +60,12 @@ where npm >nul 2>nul
 if %errorlevel% equ 0 (
     echo [+] Installing Electron desktop packages...
     call npm install -q
+    if !errorlevel! neq 0 exit /b !errorlevel!
+    echo [+] Building the IDE renderer...
+    call npm run build
+    if !errorlevel! neq 0 exit /b !errorlevel!
 ) else (
-    echo     [!] Node/NPM not found. Web mode will work, but install Node.js from https://nodejs.org for Desktop IDE mode.
+    echo     [!] Node/NPM not found. Install Node.js from https://nodejs.org to build and run the IDE.
 )
 
 REM 5. Check Ollama (Local AI Engine)
@@ -63,7 +73,7 @@ echo.
 echo [+] Checking Local Ollama Engine...
 where ollama >nul 2>nul
 if %errorlevel% equ 0 (
-    echo     [✓] Ollama CLI detected.
+    echo     [OK] Ollama CLI detected.
 ) else (
     echo     [!] Ollama is not installed on this system.
     echo         For local offline GPU inference, install Ollama from: https://ollama.com

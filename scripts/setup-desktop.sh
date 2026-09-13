@@ -17,14 +17,14 @@ Version=1.0
 Type=Application
 Name=VexP Code IDE
 GenericName=AI Code IDE
-Comment=Autonomous AI Coding Harness and IDE
+Comment=AI coding workspace with controlled agent tools
 Exec=$DIR/scripts/launch-ide.sh
 Icon=$DIR/assets/icon.png
 Terminal=false
 Categories=Development;IDE;
 StartupWMClass=VexP Code IDE
 StartupNotify=true
-Keywords=ide;ai;code;claude;harness;
+Keywords=ide;ai;code;agent;harness;
 EOF
 
 chmod +x "$APP_DIR/vexp-code-ide.desktop"
@@ -39,5 +39,5 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APP_DIR" 2>/dev/null || true
 fi
 
-echo "✅ Desktop launcher installed successfully!"
+echo "Desktop launcher installed successfully."
 echo "You can now launch 'VexP Code IDE' from your application menu or desktop."

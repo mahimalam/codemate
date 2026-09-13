@@ -1,29 +1,66 @@
 {
   "name": "vexp-code-ide",
+  "desktopName": "vexp-code-ide.desktop",
   "version": "2.6.0",
-  "description": "Autonomous AI Coding Harness and Desktop IDE",
+  "description": "Desktop AI coding IDE with local and cloud models, web research, Git, and controlled agent tools.",
   "main": "electron/main.js",
   "scripts": {
-    "start": "electron . --no-sandbox",
+    "start": "npm run build && node electron/launch.js",
+    "dev": "vite --config frontend/vite.config.ts",
+    "build": "vite build --config frontend/vite.config.ts",
+    "typecheck": "tsc -p frontend/tsconfig.json",
+    "test:backend": "python3 -m unittest discover -s tests -v",
+    "check": "npm run typecheck && npm run build && npm run test:backend",
+    "predist:linux": "npm run build",
     "dist:linux": "electron-builder --linux AppImage deb",
+    "predist:win": "npm run build",
     "dist:win": "electron-builder --win nsis portable"
   },
   "keywords": [
     "ide",
     "ai",
-    "claude-code",
     "coding-agent",
     "harness",
-    "electron"
+    "electron",
+    "desktop-ide",
+    "local-ai"
   ],
-  "author": "VexP",
+  "author": {
+    "name": "VexP",
+    "email": "noreply@vexp.local"
+  },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^31.4.0"
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron": "^41.10.3",
+    "electron-builder": "^26.15.3",
+    "lucide-react": "^1.43.0",
+    "monaco-editor": "^0.53.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
   },
   "build": {
     "appId": "com.vexp.codeide",
     "productName": "VexP Code IDE",
+    "files": ["electron/**/*", "package.json"],
+    "extraResources": [
+      { "from": "backend", "to": "backend", "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"] },
+      { "from": "frontend/dist", "to": "frontend/dist" },
+      { "from": "config", "to": "config" },
+      { "from": "assets", "to": "assets" },
+      { "from": "requirements.txt", "to": "requirements.txt" }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -33,6 +70,8 @@
         "deb"
       ],
       "category": "Development",
+      "syncDesktopName": true,
+      "executableArgs": ["--ozone-platform=x11"],
       "icon": "assets/icon.png"
     },
     "win": {
@@ -40,7 +79,6 @@
         "nsis",
         "portable"
       ],
-      "category": "Development",
       "icon": "assets/icon.png"
     }
   }

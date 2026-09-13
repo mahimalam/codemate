@@ -4,10 +4,10 @@
   "app": {
     "name": "VexP Code IDE",
     "short_name": "VexP Code",
-    "tagline": "Autonomous AI Coding Harness",
+    "tagline": "AI coding workspace with controlled agent tools",
     "version": "2.6.0",
-    "author": "Your Name",
-    "github_url": "https://github.com/your-username/your-repo"
+    "author": "mahimalam",
+    "github_url": "https://github.com/mahimalam/vexp-code-ide"
   },
 
   "agent": {

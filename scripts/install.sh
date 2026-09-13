@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Claude Code IDE - 1-Click Installer
+# VexP Code - Linux installer
 # ==============================================================================
 set -e
 
@@ -8,18 +8,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "=================================================="
-echo "  VexP Code IDE - Autonomous AI Coding Harness    "
+echo "  VexP Code IDE                                "
 echo "=================================================="
 echo ""
 
 # 1. Check Python version
 if ! command -v python3 &> /dev/null; then
     echo "[ERROR] python3 is required but not installed."
-    echo "Please install Python 3.9+ and try again."
+    echo "Please install Python 3.10+ and try again."
     exit 1
 fi
 
 PY_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if ! python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"; then
+    echo "[ERROR] Python 3.10 or newer is required; found ${PY_VERSION}."
+    exit 1
+fi
 echo "[+] Detected Python ${PY_VERSION}"
 
 # 2. Setup Virtual Environment
@@ -43,21 +47,23 @@ echo "[+] Checking Desktop IDE environment..."
 if command -v npm &> /dev/null; then
     echo "[+] Installing Electron desktop packages..."
     (cd "${ROOT_DIR}" && npm install -q)
+    echo "[+] Building the IDE renderer..."
+    (cd "${ROOT_DIR}" && npm run build)
     if [ -f "${ROOT_DIR}/scripts/setup-desktop.sh" ]; then
         echo "[+] Setting up Linux desktop shortcut..."
         bash "${ROOT_DIR}/scripts/setup-desktop.sh"
     fi
 else
-    echo "    [!] Node/NPM not found. Web mode will work, but install Node.js to use Desktop IDE mode."
+    echo "    [!] Node/NPM not found. Install Node.js to build and run the IDE."
 fi
 
 # 5. Check Ollama (Local AI Engine)
 echo ""
 echo "[+] Checking Local Ollama AI Engine..."
 if command -v ollama &> /dev/null; then
-    echo "    [✓] Ollama CLI detected."
+    echo "    [OK] Ollama CLI detected."
     if curl -s http://127.0.0.1:11434/api/tags > /dev/null 2>&1; then
-        echo "    [✓] Ollama daemon is active and running on http://127.0.0.1:11434."
+        echo "    [OK] Ollama daemon is active and running on http://127.0.0.1:11434."
     else
         echo "    [!] Ollama daemon is not currently running."
         echo "        You can start it in a separate terminal with: 'ollama serve'"

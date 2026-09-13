@@ -11,6 +11,10 @@ import urllib.request
 import struct
 import signal
 import asyncio
+import secrets
+import tempfile
+import hashlib
+from urllib.parse import urlparse
 from typing import List, Optional, Dict, Any
 
 # Cross-platform PTY detection (Linux/macOS vs Windows)
@@ -24,39 +28,25 @@ if sys.platform != "win32":
     except ImportError:
         pass
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-try:
-    from ddgs import DDGS
-except ImportError:
-    from duckduckgo_search import DDGS
-
 app = FastAPI(title="VexP Code IDE")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 SERVER_START_TIME = time.time()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
-INDEX_HTML_PATH = os.path.join(FRONTEND_DIR, "index.html")
-
-VENDOR_DIR = os.path.join(FRONTEND_DIR, "vendor")
-if os.path.exists(VENDOR_DIR):
-    app.mount("/vendor", StaticFiles(directory=VENDOR_DIR), name="vendor")
+FRONTEND_DIST_DIR = os.path.join(FRONTEND_DIR, "dist")
+INDEX_HTML_PATH = os.path.join(FRONTEND_DIST_DIR, "index.html")
+FRONTEND_ASSETS_DIR = os.path.join(FRONTEND_DIST_DIR, "assets")
+if os.path.isdir(FRONTEND_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="assets")
 
 # ── User config directory (never committed to git) ─────────────────────────
-CONFIG_DIR = os.path.expanduser("~/.claude_code_ide")
+CONFIG_DIR = os.path.abspath(os.path.expanduser(os.environ.get("VEXP_CONFIG_DIR", "~/.claude_code_ide")))
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
 DEFAULT_STORAGE_DIR = os.path.join(CONFIG_DIR, "storage")
@@ -65,6 +55,13 @@ HISTORY_FILE = os.path.join(CONFIG_DIR, "chat_history.json")
 WORKSPACE_CONFIG_FILE = os.path.join(CONFIG_DIR, "active_workspace.json")
 RECENT_WORKSPACES_FILE = os.path.join(CONFIG_DIR, "recent_workspaces.json")
 PROVIDER_CONFIG_FILE = os.path.join(CONFIG_DIR, "provider_config.json")
+GITHUB_CONFIG_FILE = os.path.join(CONFIG_DIR, "github.json")
+DATABASE_FILE = os.path.join(CONFIG_DIR, "vexp.db")
+APP_SESSION_TOKEN = os.environ.get("VEXP_SESSION_TOKEN") or secrets.token_urlsafe(32)
+try:
+    os.chmod(CONFIG_DIR, 0o700)
+except OSError:
+    pass
 
 # ── Branding config (config/branding.json) ─────────────────────────────────
 _BRANDING_FILE = os.path.join(PROJECT_ROOT, "config", "branding.json")
@@ -79,15 +76,53 @@ AGENT_NAME  = BRANDING.get("agent", {}).get("name", "AI Agent")
 SYS_INTRO   = BRANDING.get("defaults", {}).get("system_prompt_intro", "You are an expert agentic AI software engineer.")
 TERM_PROMPT = BRANDING.get("agent", {}).get("terminal_prompt", "user $")
 
-from tools import TOOLS_SPEC, execute_agent_tool
-from tool_rescue import rescue_tool_calls
+try:
+    from .tools import TOOLS_SPEC, WEB_TOOLS_SPEC, execute_agent_tool
+    from .storage import Storage
+    from .providers import stream_llm_turn as provider_stream_llm_turn
+    from .agent_runtime import AgentRuntime
+    from .model_catalog import build_model_catalog
+except ImportError:
+    from tools import TOOLS_SPEC, WEB_TOOLS_SPEC, execute_agent_tool
+    from storage import Storage
+    from providers import stream_llm_turn as provider_stream_llm_turn
+    from agent_runtime import AgentRuntime
+    from model_catalog import build_model_catalog
+
+storage = Storage(DATABASE_FILE, HISTORY_FILE, MEMORY_FILE)
+
+
+@app.middleware("http")
+async def protect_local_api(request: Request, call_next):
+    """Reject cross-origin/local API calls that do not belong to this app launch."""
+    host = request.headers.get("host", "").split(":", 1)[0].strip("[]")
+    if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
+        return JSONResponse(status_code=400, content={"error": "invalid_host"})
+    origin = request.headers.get("origin")
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and origin:
+        origin_host = urlparse(origin).netloc
+        if origin_host != request.headers.get("host"):
+            return JSONResponse(status_code=403, content={"error": "invalid_origin"})
+    public_path = request.url.path in {"/", "/vexp.svg"} or request.url.path.startswith("/assets/")
+    supplied = request.headers.get("x-vexp-token") or request.cookies.get("vexp_session")
+    if not public_path and not secrets.compare_digest(supplied or "", APP_SESSION_TOKEN):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    response = await call_next(request)
+    if request.url.path == "/":
+        response.set_cookie("vexp_session", APP_SESSION_TOKEN, httponly=True, samesite="strict", secure=False, path="/")
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 STANDARD_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 def default_provider_config():
     return {
+        "config_version": 3,
         "active_provider": "free_pool",
-        "active_model": "auto-failover",
+        "active_model": "fast-auto",
+        "active_tier": "fast",
         "providers": {
             "ollama": {
                 "base_url": "http://127.0.0.1:11434",
@@ -119,7 +154,7 @@ def default_provider_config():
                 "base_url": "https://models.inference.ai.azure.com",
                 "api_key": "",
                 "model": "gpt-4o",
-                "enabled": True,
+                "enabled": False,
                 "is_free": True
             },
             "pollinations": {
@@ -176,47 +211,21 @@ def default_provider_config():
         "custom_providers": []
     }
 
-def auto_scavenge_credentials(cfg: dict) -> bool:
-    """
-    Auto-discovers credentials already present on the user machine
-    to activate free and cloud AI tiers with zero manual copy-pasting.
-    """
-    changed = False
-    env_mappings = {
-        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "groq": ["GROQ_API_KEY"],
-        "cerebras": ["CEREBRAS_API_KEY"],
-        "openrouter": ["OPENROUTER_API_KEY"],
-        "openai": ["OPENAI_API_KEY"],
-        "anthropic": ["ANTHROPIC_API_KEY"]
-    }
-    for provider, env_vars in env_mappings.items():
-        if provider in cfg.get("providers", {}):
-            if not cfg["providers"][provider].get("api_key"):
-                for var in env_vars:
-                    val = os.environ.get(var, "").strip()
-                    if val:
-                        cfg["providers"][provider]["api_key"] = val
-                        cfg["providers"][provider]["enabled"] = True
-                        changed = True
-                        break
-
-    # Check GitHub CLI token for GitHub Models
-    if "github_models" in cfg.get("providers", {}):
-        if not cfg["providers"]["github_models"].get("api_key"):
-            try:
-                gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=2)
-                if gh_res.returncode == 0 and gh_res.stdout.strip():
-                    cfg["providers"]["github_models"]["api_key"] = gh_res.stdout.strip()
-                    cfg["providers"]["github_models"]["enabled"] = True
-                    changed = True
-            except Exception:
-                pass
-
-    return changed
-
 def sanitize_provider_config(d: dict) -> bool:
     changed = False
+    github_models = d.get("providers", {}).get("github_models", {})
+    if github_models.get("enabled"):
+        github_models["enabled"] = False
+        changed = True
+    if int(d.get("config_version", 0)) < 3:
+        for provider_id in ("kilo", "pollinations", "aihorde"):
+            if provider_id in d.get("providers", {}):
+                d["providers"][provider_id]["enabled"] = True
+        d["active_provider"] = "free_pool"
+        d["active_model"] = "fast-auto"
+        d["active_tier"] = "fast"
+        d["config_version"] = 3
+        changed = True
     kilo = d.get("providers", {}).get("kilo", {})
     if kilo:
         if kilo.get("model") in ["moonshotai/kimi-k2.6:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free", "meta-llama/llama-3.3-70b-instruct:free"]:
@@ -241,8 +250,10 @@ def load_provider_config() -> dict:
             with open(PROVIDER_CONFIG_FILE, "r") as f:
                 data = json.load(f)
                 d = default_provider_config()
+                d["config_version"] = data.get("config_version", 0)
                 d["active_provider"] = data.get("active_provider", d["active_provider"])
                 d["active_model"] = data.get("active_model", d["active_model"])
+                d["active_tier"] = data.get("active_tier", d["active_tier"])
                 for p_key, p_val in data.get("providers", {}).items():
                     if p_key in d["providers"]:
                         d["providers"][p_key].update(p_val)
@@ -250,24 +261,87 @@ def load_provider_config() -> dict:
                         d["providers"][p_key] = p_val
                 d["custom_providers"] = data.get("custom_providers", [])
                 sanitized = sanitize_provider_config(d)
-                scavenged = auto_scavenge_credentials(d)
-                if sanitized or scavenged:
+                if sanitized:
                     save_provider_config(d)
                 return d
         except Exception:
             pass
     cfg = default_provider_config()
     sanitize_provider_config(cfg)
-    auto_scavenge_credentials(cfg)
     save_provider_config(cfg)
     return cfg
 
 def save_provider_config(cfg: dict):
     try:
-        with open(PROVIDER_CONFIG_FILE, "w") as f:
-            json.dump(cfg, f, indent=2)
+        descriptor, temporary_path = tempfile.mkstemp(prefix=".provider-", dir=CONFIG_DIR)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(cfg, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, PROVIDER_CONFIG_FILE)
+            os.chmod(PROVIDER_CONFIG_FILE, 0o600)
+        finally:
+            if os.path.exists(temporary_path):
+                os.unlink(temporary_path)
     except Exception as e:
         print("Failed to save provider config:", e)
+
+
+def load_github_config() -> dict:
+    try:
+        with open(GITHUB_CONFIG_FILE, "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_github_config(value: dict) -> None:
+    descriptor, temporary_path = tempfile.mkstemp(prefix=".github-", dir=CONFIG_DIR)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, GITHUB_CONFIG_FILE)
+        os.chmod(GITHUB_CONFIG_FILE, 0o600)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
+
+def github_git_environment() -> dict:
+    env = os.environ.copy()
+    token = str(load_github_config().get("token") or "")
+    if not token:
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        return env
+    if sys.platform == "win32":
+        helper = os.path.join(CONFIG_DIR, "github-askpass.cmd")
+        content = '@echo off\r\necho %1 | findstr /I "Username" >nul\r\nif %errorlevel%==0 (echo x-access-token) else (echo %VEXP_GITHUB_TOKEN%)\r\n'
+    else:
+        helper = os.path.join(CONFIG_DIR, "github-askpass.sh")
+        content = '#!/bin/sh\ncase "$1" in *Username*) printf "%s" "x-access-token" ;; *) printf "%s" "$VEXP_GITHUB_TOKEN" ;; esac\n'
+    current = ""
+    try:
+        with open(helper, "r", encoding="utf-8") as handle:
+            current = handle.read()
+    except OSError:
+        pass
+    if current != content:
+        with open(helper, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+    os.chmod(helper, 0o700)
+    env.update({"GIT_ASKPASS": helper, "GIT_ASKPASS_REQUIRE": "force", "GIT_TERMINAL_PROMPT": "0", "VEXP_GITHUB_TOKEN": token})
+    return env
+
+
+def clean_git_output(value: str) -> str:
+    value = re.sub(r"https://[^/@\s]+(?::[^@\s]*)?@github\.com", "https://github.com", value)
+    return re.sub(r"\b(?:ghp_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|gh[ousr]_[A-Za-z0-9]+)\b", "[redacted-token]", value)
 
 def fetch_ollama_models(base_url: str = "http://127.0.0.1:11434") -> List[Dict[str, Any]]:
     try:
@@ -302,7 +376,7 @@ def warmup_ollama_model(model_name: str, base_url: str = "http://127.0.0.1:11434
 
 @app.get("/api/version")
 def api_version():
-    return {"server_time": SERVER_START_TIME, "version": "2.6.0"}
+    return {"server_time": SERVER_START_TIME, "version": "2.6.0", "session_fingerprint": hashlib.sha256(APP_SESSION_TOKEN.encode()).hexdigest()[:16]}
 
 os.makedirs(DEFAULT_STORAGE_DIR, exist_ok=True)
 
@@ -367,6 +441,22 @@ def set_active_workspace(path: Optional[str]):
         json.dump({"path": full}, f, indent=2)
     add_recent_workspace(full)
     return full
+
+
+def resolve_workspace_target(path: Optional[str], *, must_exist: bool = True) -> str:
+    """Resolve a UI path inside the active workspace, including through symlinks."""
+    workspace = get_active_workspace()
+    if not workspace:
+        raise HTTPException(status_code=400, detail="Open a workspace first")
+    root = os.path.realpath(workspace)
+    raw = path or root
+    candidate = os.path.abspath(os.path.expanduser(raw if os.path.isabs(raw) else os.path.join(root, raw)))
+    resolved = os.path.realpath(candidate if os.path.exists(candidate) else os.path.dirname(candidate))
+    if os.path.commonpath([root, resolved]) != root:
+        raise HTTPException(status_code=403, detail="Path is outside the active workspace")
+    if must_exist and not os.path.exists(candidate):
+        raise HTTPException(status_code=404, detail="Path not found")
+    return candidate
 
 @app.get("/api/workspace")
 def get_workspace_info():
@@ -440,7 +530,7 @@ class MkdirPayload(BaseModel):
 
 @app.post("/api/fs/mkdir")
 def create_directory(payload: MkdirPayload):
-    full = os.path.abspath(os.path.expanduser(payload.path))
+    full = resolve_workspace_target(payload.path, must_exist=False)
     try:
         os.makedirs(full, exist_ok=True)
         return {"success": True, "path": full}
@@ -453,8 +543,8 @@ class RenamePayload(BaseModel):
 
 @app.post("/api/fs/rename")
 def rename_item(payload: RenamePayload):
-    old_f = os.path.abspath(os.path.expanduser(payload.old_path))
-    new_f = os.path.abspath(os.path.expanduser(payload.new_path))
+    old_f = resolve_workspace_target(payload.old_path)
+    new_f = resolve_workspace_target(payload.new_path, must_exist=False)
     if not os.path.exists(old_f):
         raise HTTPException(status_code=404, detail="Source not found")
     try:
@@ -468,7 +558,9 @@ class DeletePayload(BaseModel):
 
 @app.post("/api/fs/delete")
 def delete_item(payload: DeletePayload):
-    full = os.path.abspath(os.path.expanduser(payload.path))
+    full = resolve_workspace_target(payload.path)
+    if os.path.realpath(full) == os.path.realpath(get_active_workspace() or ""):
+        raise HTTPException(status_code=400, detail="The workspace root cannot be deleted")
     if not os.path.exists(full):
         raise HTTPException(status_code=404, detail="Item not found")
     try:
@@ -487,7 +579,7 @@ def get_file_tree(path: Optional[str] = Query(None)):
     target = path or get_active_workspace()
     if not target:
         return []
-    full_path = os.path.abspath(os.path.expanduser(target))
+    full_path = resolve_workspace_target(target)
     if not os.path.exists(full_path):
         return []
     
@@ -524,12 +616,14 @@ LANGUAGE_MAP = {
 
 @app.get("/api/fs/search")
 def search_codebase(query: str = Query(...), path: Optional[str] = Query(None)):
-    target_dir = path or get_active_workspace()
-    if not os.path.exists(target_dir):
+    target_dir = resolve_workspace_target(path or get_active_workspace())
+    query = query.strip()
+    if not query or len(query) > 500:
         return []
-    
-    cmd = ["grep", "-rnI", "--exclude-dir={.git,node_modules,__pycache__,.venv,.astro,dist,build}", 
-           "-m", "50", query, target_dir]
+    if shutil.which("rg"):
+        cmd = ["rg", "--line-number", "--no-heading", "--color", "never", "--max-count", "50", "--glob", "!.git/**", "--glob", "!node_modules/**", "--glob", "!.venv/**", "--glob", "!dist/**", "--glob", "!build/**", "--", query, target_dir]
+    else:
+        cmd = ["grep", "-rnI", "-m", "50", "--exclude-dir=.git", "--exclude-dir=node_modules", "--exclude-dir=__pycache__", "--exclude-dir=.venv", "--exclude-dir=dist", "--exclude-dir=build", "--", query, target_dir]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         results = []
@@ -588,9 +682,97 @@ class GitConfigPayload(BaseModel):
     email: Optional[str] = None
     path: Optional[str] = None
 
+class GitHubConnectPayload(BaseModel):
+    token: str
+    remote_url: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    path: Optional[str] = None
+
+
+def _clean_github_remote(raw_url: str) -> str:
+    value = raw_url.strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlparse(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid GitHub repository URL") from exc
+    if parsed.scheme != "https" or parsed.hostname != "github.com" or parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Use a clean https://github.com/owner/repository URL")
+    path = parsed.path.rstrip("/")
+    if len([part for part in path.split("/") if part]) != 2:
+        raise HTTPException(status_code=400, detail="GitHub repository URL must include owner and repository")
+    return f"https://github.com{path}{'' if path.endswith('.git') else '.git'}"
+
+
+@app.get("/api/github/status")
+def github_connection_status(path: Optional[str] = Query(None)):
+    config = load_github_config()
+    remote_url = ""
+    try:
+        target_dir = resolve_workspace_target(path or get_active_workspace())
+        raw_remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+        remote_url = clean_git_output(raw_remote)
+    except Exception:
+        pass
+    return {
+        "connected": bool(config.get("token") and config.get("login")),
+        "login": str(config.get("login") or ""),
+        "name": str(config.get("name") or ""),
+        "remote_url": remote_url,
+        "github_models_available": False,
+        "github_models_message": "GitHub retired GitHub Models on July 30, 2026. Repository access remains available.",
+    }
+
+
+@app.post("/api/github/connect")
+def connect_github(payload: GitHubConnectPayload):
+    token = payload.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="A GitHub access token is required")
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
+    remote_url = _clean_github_remote(payload.remote_url) if payload.remote_url else ""
+    request = urllib.request.Request(
+        "https://api.github.com/user",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": STANDARD_USER_AGENT},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            account = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(status_code=400, detail="GitHub rejected this token. Create a new token with repository Contents read/write permission.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach GitHub: {exc}") from exc
+    login = str(account.get("login") or "").strip()
+    if not login:
+        raise HTTPException(status_code=400, detail="GitHub did not return an authenticated account")
+
+    if payload.username is not None:
+        subprocess.run(["git", "config", "user.name", payload.username.strip()], capture_output=True, text=True, cwd=target_dir)
+    if payload.email is not None:
+        subprocess.run(["git", "config", "user.email", payload.email.strip()], capture_output=True, text=True, cwd=target_dir)
+    if remote_url:
+        remotes = subprocess.run(["git", "remote"], capture_output=True, text=True, cwd=target_dir).stdout.split()
+        command = ["git", "remote", "set-url" if "origin" in remotes else "add", "origin", remote_url]
+        result = subprocess.run(command, capture_output=True, text=True, cwd=target_dir)
+        if result.returncode != 0:
+            raise HTTPException(status_code=400, detail=clean_git_output(result.stderr.strip() or "Could not set the GitHub remote"))
+    save_github_config({"token": token, "login": login, "name": str(account.get("name") or "")})
+    return github_connection_status(payload.path)
+
+
+@app.post("/api/github/disconnect")
+def disconnect_github():
+    try:
+        os.remove(GITHUB_CONFIG_FILE)
+    except FileNotFoundError:
+        pass
+    return {"success": True, "connected": False}
+
 @app.get("/api/git/status")
 def git_status_endpoint(path: Optional[str] = Query(None)):
-    target_dir = path or get_active_workspace()
+    target_dir = resolve_workspace_target(path or get_active_workspace())
     try:
         is_git = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=target_dir).returncode == 0
         if not is_git:
@@ -602,7 +784,7 @@ def git_status_endpoint(path: Optional[str] = Query(None)):
             branch = head_rev or "main"
         
         raw_remote_url = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
-        remote_url = re.sub(r'https://[^@]+@github\.com', 'https://github.com', raw_remote_url)
+        remote_url = clean_git_output(raw_remote_url)
         status_raw = subprocess.run(["git", "status", "--porcelain=v1"], capture_output=True, text=True, cwd=target_dir).stdout
 
         
@@ -648,7 +830,7 @@ def git_status_endpoint(path: Optional[str] = Query(None)):
 
 @app.post("/api/git/init")
 def git_init_endpoint(payload: GitActionPayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         res = subprocess.run(["git", "init"], capture_output=True, text=True, cwd=target_dir)
         return {"success": res.returncode == 0, "output": res.stdout + res.stderr}
@@ -657,53 +839,47 @@ def git_init_endpoint(payload: GitActionPayload):
 
 @app.post("/api/git/stage")
 def git_stage_endpoint(payload: GitActionPayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         if payload.all or not payload.file:
             res = subprocess.run(["git", "add", "-A"], capture_output=True, text=True, cwd=target_dir)
         else:
-            res = subprocess.run(["git", "add", payload.file], capture_output=True, text=True, cwd=target_dir)
+            full_path = resolve_workspace_target(os.path.join(target_dir, payload.file))
+            res = subprocess.run(["git", "add", "--", os.path.relpath(full_path, target_dir)], capture_output=True, text=True, cwd=target_dir)
         return {"success": res.returncode == 0, "output": res.stdout + res.stderr}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/git/unstage")
 def git_unstage_endpoint(payload: GitActionPayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         if payload.all or not payload.file:
             res = subprocess.run(["git", "reset", "HEAD"], capture_output=True, text=True, cwd=target_dir)
         else:
-            res = subprocess.run(["git", "reset", "HEAD", "--", payload.file], capture_output=True, text=True, cwd=target_dir)
+            full_path = resolve_workspace_target(os.path.join(target_dir, payload.file))
+            res = subprocess.run(["git", "reset", "HEAD", "--", os.path.relpath(full_path, target_dir)], capture_output=True, text=True, cwd=target_dir)
         return {"success": res.returncode == 0, "output": res.stdout + res.stderr}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/git/discard")
 def git_discard_endpoint(payload: GitActionPayload):
-    target_dir = payload.path or get_active_workspace()
-    if not payload.file and not payload.all:
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
+    if payload.all:
+        raise HTTPException(status_code=400, detail="Bulk discard is disabled; discard files individually")
+    if not payload.file:
         raise HTTPException(status_code=400, detail="File required")
     try:
-        if payload.all:
-            subprocess.run(["git", "checkout", "--", "."], capture_output=True, text=True, cwd=target_dir)
-            subprocess.run(["git", "clean", "-fd"], capture_output=True, text=True, cwd=target_dir)
-            return {"success": True}
-        
-        full_p = os.path.join(target_dir, payload.file)
-        res = subprocess.run(["git", "checkout", "--", payload.file], capture_output=True, text=True, cwd=target_dir)
-        if res.returncode != 0:
-            if os.path.isdir(full_p):
-                shutil.rmtree(full_p, ignore_errors=True)
-            elif os.path.exists(full_p):
-                os.remove(full_p)
-        return {"success": True}
+        full_path = resolve_workspace_target(os.path.join(target_dir, payload.file))
+        res = subprocess.run(["git", "restore", "--worktree", "--", os.path.relpath(full_path, target_dir)], capture_output=True, text=True, cwd=target_dir)
+        return {"success": res.returncode == 0, "output": res.stdout.strip() or res.stderr.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/git/commit")
 def git_commit_endpoint(payload: GitCommitPayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     msg = payload.message.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Commit message cannot be empty")
@@ -729,7 +905,7 @@ def git_commit_endpoint(payload: GitCommitPayload):
 
 @app.post("/api/git/push")
 def git_push_endpoint(payload: GitRemotePayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         branch = payload.branch
         if not branch:
@@ -737,26 +913,18 @@ def git_push_endpoint(payload: GitRemotePayload):
         
         remote = payload.remote or "origin"
         cmd = ["git", "push", "-u", remote, branch]
-        res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir, env=github_git_environment(), timeout=120)
         
-        # Handle non-fast-forward: pull rebase and push again
-        if res.returncode != 0 and "rejected" in res.stderr.lower():
-            subprocess.run(["git", "pull", "--rebase", remote, branch], capture_output=True, text=True, cwd=target_dir)
-            res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
-
         raw_out = res.stdout.strip() or res.stderr.strip()
-        clean_out = re.sub(r'https://[^@]+@', 'https://', raw_out)
+        clean_out = clean_git_output(raw_out)
 
         if res.returncode != 0:
             if ("Permission to" in clean_out and "denied" in clean_out) or "403" in clean_out:
                 clean_out = (
                     "GitHub Authentication Error (HTTP 403 Forbidden):\n"
                     "Permission denied to push to this repository.\n\n"
-                    "Root Cause: Your GitHub Personal Access Token is valid for identification, but does NOT have write permissions.\n\n"
-                    "To fix this:\n"
-                    "1. Go to https://github.com/settings/tokens/new?scopes=repo&description=VexP+Code+IDE\n"
-                    "2. Make sure the 'repo' scope (Full control of private repositories) is checked.\n"
-                    "3. Generate and paste the new token in the GitHub Connection modal."
+                    "The connected token can identify the account but cannot write to this repository. "
+                    "Grant the fine-grained token access to this repository with Contents read/write permission, then reconnect it in Source Control."
                 )
             return {"success": False, "output": clean_out}
 
@@ -769,36 +937,37 @@ def git_push_endpoint(payload: GitRemotePayload):
 
 @app.post("/api/git/pull")
 def git_pull_endpoint(payload: GitRemotePayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         cmd = ["git", "pull", "--rebase"]
-        res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir)
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=target_dir, env=github_git_environment(), timeout=120)
         return {
             "success": res.returncode == 0,
-            "output": res.stdout.strip() or res.stderr.strip()
+            "output": clean_git_output(res.stdout.strip() or res.stderr.strip())
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/git/diff")
 def git_diff_endpoint(file: str = Query(...), path: Optional[str] = Query(None)):
-    target_dir = path or get_active_workspace()
+    target_dir = resolve_workspace_target(path or get_active_workspace())
     try:
-        orig_res = subprocess.run(["git", "show", f"HEAD:{file}"], capture_output=True, text=True, cwd=target_dir)
+        full_path = resolve_workspace_target(os.path.join(target_dir, file))
+        relative_file = os.path.relpath(full_path, target_dir)
+        orig_res = subprocess.run(["git", "show", f"HEAD:{relative_file}"], capture_output=True, text=True, cwd=target_dir)
         original_content = orig_res.stdout if orig_res.returncode == 0 else ""
         
-        full_path = os.path.join(target_dir, file)
         modified_content = ""
         if os.path.exists(full_path):
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 modified_content = f.read()
         
-        ext = os.path.splitext(file)[1].lower()
+        ext = os.path.splitext(relative_file)[1].lower()
         language = LANGUAGE_MAP.get(ext, "plaintext")
         
         return {
             "success": True,
-            "file": file,
+            "file": relative_file,
             "original": original_content,
             "modified": modified_content,
             "language": language
@@ -808,7 +977,7 @@ def git_diff_endpoint(file: str = Query(...), path: Optional[str] = Query(None))
 
 @app.post("/api/git/remote/set")
 def git_set_remote_endpoint(payload: GitSetRemotePayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         is_git = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=target_dir).returncode == 0
         if not is_git:
@@ -827,15 +996,8 @@ def git_set_remote_endpoint(payload: GitSetRemotePayload):
         if target_url.startswith("https://github.com/") and not target_url.endswith(".git"):
             target_url += ".git"
 
-        # Embed Personal Access Token if provided
-        if payload.token and payload.token.strip() and target_url.startswith("https://"):
-            tok = payload.token.strip()
-            clean_host_path = re.sub(r'^https://[^@]+@', 'https://', target_url)
-            if payload.username and payload.username.strip():
-                u = payload.username.strip()
-                target_url = clean_host_path.replace("https://", f"https://{u}:{tok}@")
-            else:
-                target_url = clean_host_path.replace("https://", f"https://{tok}@")
+        if payload.token and payload.token.strip():
+            raise HTTPException(status_code=400, detail="Tokens are not stored in Git remote URLs; use your system credential manager")
 
         remote_name = payload.name or "origin"
 
@@ -854,10 +1016,10 @@ def git_set_remote_endpoint(payload: GitSetRemotePayload):
             branch = payload.branch
             if not branch:
                 branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, cwd=target_dir).stdout.strip() or "main"
-            push_res = subprocess.run(["git", "push", "-u", remote_name, branch], capture_output=True, text=True, cwd=target_dir)
+            push_res = subprocess.run(["git", "push", "-u", remote_name, branch], capture_output=True, text=True, cwd=target_dir, env=github_git_environment(), timeout=120)
             push_output = push_res.stdout.strip() or push_res.stderr.strip()
             if push_res.returncode != 0:
-                clean_push_out = re.sub(r'https://[^@]+@', 'https://', push_output)
+                clean_push_out = clean_git_output(push_output)
                 return {
                     "success": False,
                     "output": f"Remote saved, but push failed:\n{clean_push_out}",
@@ -875,59 +1037,13 @@ def git_set_remote_endpoint(payload: GitSetRemotePayload):
 
 @app.post("/api/git/remote/test")
 def git_test_remote_endpoint(payload: GitTestRemotePayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
-        test_target = payload.remote or "origin"
-        tok = (payload.token or "").strip()
+        if payload.token and payload.token.strip():
+            raise HTTPException(status_code=400, detail="Use the system Git credential manager instead of passing tokens to the IDE")
+        test_target = payload.url.strip() if payload.url else (payload.remote or "origin")
 
-        # If token was not explicitly supplied, extract it from existing origin remote if present
-        if not tok:
-            curr_rem = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
-            match = re.search(r'https://([^:]+):([^@]+)@', curr_rem) or re.search(r'https://([^@]+)@', curr_rem)
-            if match:
-                tok = match.group(2) if match.lastindex == 2 else match.group(1)
-
-        if payload.url:
-            u = payload.url.strip()
-            if tok and u.startswith("https://"):
-                clean = re.sub(r'^https://[^@]+@', 'https://', u)
-                if payload.username and payload.username.strip():
-                    test_target = clean.replace("https://", f"https://{payload.username.strip()}:{tok}@")
-                else:
-                    test_target = clean.replace("https://", f"https://{tok}@")
-            else:
-                test_target = u
-
-        # Check GitHub token permissions via GitHub API
-        if tok and (tok.startswith("ghp_") or tok.startswith("github_pat_")):
-            try:
-                gh_req = urllib.request.Request(
-                    "https://api.github.com/user",
-                    headers={
-                        "Authorization": f"token {tok}",
-                        "User-Agent": STANDARD_USER_AGENT,
-                        "Accept": "application/vnd.github.v3+json"
-                    }
-                )
-                with urllib.request.urlopen(gh_req, timeout=8) as gh_resp:
-                    scopes = gh_resp.headers.get("x-oauth-scopes", "")
-                    scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
-                    if "repo" not in scope_list and "public_repo" not in scope_list:
-                        return {
-                            "success": False,
-                            "output": (
-                                "⚠️ Token Warning: Your GitHub token is valid, but MISSING WRITE PERMISSIONS!\n\n"
-                                "GitHub will block 'git push' with Error 403 Forbidden because the 'repo' scope is not checked.\n\n"
-                                "To fix this:\n"
-                                "1. Visit https://github.com/settings/tokens/new?scopes=repo&description=VexP+Code+IDE\n"
-                                "2. Generate the token with the 'repo' scope checked.\n"
-                                "3. Paste the new token here."
-                            )
-                        }
-            except Exception:
-                pass
-
-        res = subprocess.run(["git", "ls-remote", test_target], capture_output=True, text=True, cwd=target_dir, timeout=12)
+        res = subprocess.run(["git", "ls-remote", test_target], capture_output=True, text=True, cwd=target_dir, timeout=12, env=github_git_environment())
         if res.returncode == 0:
             lines = res.stdout.strip().splitlines()
             return {
@@ -937,7 +1053,7 @@ def git_test_remote_endpoint(payload: GitTestRemotePayload):
             }
         else:
             err = res.stderr.strip() or res.stdout.strip()
-            clean_err = re.sub(r'https://[^@]+@', 'https://', err)
+            clean_err = clean_git_output(err)
             return {"success": False, "output": clean_err or "Failed to connect to remote repository."}
     except subprocess.TimeoutExpired:
         return {"success": False, "output": "Connection timed out after 12 seconds."}
@@ -946,7 +1062,7 @@ def git_test_remote_endpoint(payload: GitTestRemotePayload):
 
 @app.post("/api/git/remote/remove")
 def git_remove_remote_endpoint(payload: GitRemoveRemotePayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         name = payload.name or "origin"
         res = subprocess.run(["git", "remote", "remove", name], capture_output=True, text=True, cwd=target_dir)
@@ -956,7 +1072,7 @@ def git_remove_remote_endpoint(payload: GitRemoveRemotePayload):
 
 @app.get("/api/git/config")
 def git_get_config_endpoint(path: Optional[str] = Query(None)):
-    target_dir = path or get_active_workspace()
+    target_dir = resolve_workspace_target(path or get_active_workspace())
     try:
         name = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
         if not name:
@@ -966,34 +1082,20 @@ def git_get_config_endpoint(path: Optional[str] = Query(None)):
             email = subprocess.run(["git", "config", "--global", "user.email"], capture_output=True, text=True).stdout.strip()
 
         raw_remote = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
-        clean_remote = re.sub(r'https://[^@]+@github\.com', 'https://github.com', raw_remote)
-
-        # Extract token embedded in the remote URL so the modal can repopulate the PAT field
-        saved_token = ""
-        m = re.search(r'https://(?:[^:]+):([^@]+)@github\.com', raw_remote)
-        if not m:
-            m = re.search(r'https://([^@]+)@github\.com', raw_remote)
-        if m:
-            candidate = m.group(1)
-            # Only treat it as a token if it looks like a PAT (starts with ghp_ or github_pat_ or is long)
-            if candidate.startswith(("ghp_", "github_pat_")) or len(candidate) > 20:
-                saved_token = candidate
-
-        has_token = bool(saved_token)
+        clean_remote = clean_git_output(raw_remote)
 
         return {
             "username": name,
             "email": email,
             "remote_url": clean_remote,
-            "has_token": has_token,
-            "saved_token": saved_token
+            "has_token": False
         }
     except Exception as e:
         return {"username": "", "email": "", "remote_url": "", "has_token": False, "saved_token": "", "error": str(e)}
 
 @app.post("/api/git/config")
 def git_set_config_endpoint(payload: GitConfigPayload):
-    target_dir = payload.path or get_active_workspace()
+    target_dir = resolve_workspace_target(payload.path or get_active_workspace())
     try:
         if payload.username is not None:
             subprocess.run(["git", "config", "user.name", payload.username.strip()], capture_output=True, text=True, cwd=target_dir)
@@ -1005,22 +1107,26 @@ def git_set_config_endpoint(payload: GitConfigPayload):
 
 @app.get("/api/fs/read")
 def read_file(path: str = Query(...)):
-    full_path = os.path.abspath(os.path.expanduser(path))
+    full_path = resolve_workspace_target(path)
     if not os.path.exists(full_path) or os.path.isdir(full_path):
         raise HTTPException(status_code=404, detail="File not found")
+    if os.path.getsize(full_path) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The editor limit is 5 MiB per file")
     
     ext = os.path.splitext(full_path)[1].lower()
     language = LANGUAGE_MAP.get(ext, "plaintext")
     
     try:
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
+        with open(full_path, "rb") as f:
+            raw_content = f.read()
+        content = raw_content.decode("utf-8", errors="replace")
         return {
             "success": True,
             "path": full_path,
             "name": os.path.basename(full_path),
             "content": content,
-            "language": language
+            "language": language,
+            "sha256": hashlib.sha256(raw_content).hexdigest()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1028,18 +1134,39 @@ def read_file(path: str = Query(...)):
 class WriteFilePayload(BaseModel):
     path: str
     content: str
+    expected_sha256: Optional[str] = None
 
 @app.post("/api/fs/write")
 def write_file(payload: WriteFilePayload):
-    full_path = os.path.abspath(os.path.expanduser(payload.path))
+    full_path = resolve_workspace_target(payload.path, must_exist=False)
+    encoded = payload.content.encode("utf-8")
+    if len(encoded) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The editor limit is 5 MiB per file")
     try:
+        if payload.expected_sha256 is not None:
+            if not os.path.exists(full_path):
+                raise HTTPException(status_code=409, detail="The file was removed after it was opened")
+            with open(full_path, "rb") as current_file:
+                current_sha256 = hashlib.sha256(current_file.read()).hexdigest()
+            if current_sha256 != payload.expected_sha256:
+                raise HTTPException(status_code=409, detail="The file changed on disk; reload it before saving")
         parent = os.path.dirname(full_path)
         if parent and not os.path.exists(parent):
             os.makedirs(parent, exist_ok=True)
-        with open(full_path, "w", encoding="utf-8") as f:
-            f.write(payload.content)
+        descriptor, temporary_path = tempfile.mkstemp(prefix=".vexp-save-", dir=parent or ".")
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, full_path)
+        finally:
+            if os.path.exists(temporary_path):
+                os.unlink(temporary_path)
         short = full_path.replace(os.path.expanduser("~"), "~")
-        return {"success": True, "path": full_path, "message": f"Saved {short}"}
+        return {"success": True, "path": full_path, "message": f"Saved {short}", "sha256": hashlib.sha256(encoded).hexdigest()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1048,11 +1175,21 @@ def write_file(payload: WriteFilePayload):
 # ---------------------------------------------------------------------
 @app.websocket("/ws/terminal")
 async def terminal_websocket_endpoint(websocket: WebSocket, cwd: Optional[str] = Query(None)):
+    supplied = websocket.headers.get("x-vexp-token") or websocket.cookies.get("vexp_session")
+    origin = websocket.headers.get("origin", "")
+    if not secrets.compare_digest(supplied or "", APP_SESSION_TOKEN) or (origin and urlparse(origin).netloc != websocket.headers.get("host")):
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
     await websocket.accept()
 
-    work_dir = cwd or get_active_workspace()
-    if not os.path.exists(work_dir) or not os.path.isdir(work_dir):
-        work_dir = os.path.expanduser("~")
+    try:
+        work_dir = resolve_workspace_target(cwd or get_active_workspace())
+    except HTTPException:
+        await websocket.close(code=4403, reason="Workspace unavailable")
+        return
+    if not os.path.isdir(work_dir):
+        await websocket.close(code=4403, reason="Terminal path is not a directory")
+        return
 
     if HAS_PTY:
         # Native POSIX PTY implementation for Linux and macOS
@@ -1218,63 +1355,8 @@ async def terminal_websocket_endpoint(websocket: WebSocket, cwd: Optional[str] =
         except Exception:
             pass
 
-# ---------------------------------------------------------------------
-# Command Execution (Fallback / Output Drawer)
-# ---------------------------------------------------------------------
-class ExecuteRequest(BaseModel):
-    command: str
-    cwd: Optional[str] = None
-
-@app.post("/api/execute")
-def run_command_endpoint(req: ExecuteRequest):
-    work_dir = req.cwd or get_active_workspace()
-    if not os.path.exists(work_dir):
-        work_dir = get_active_workspace()
-    try:
-        res = subprocess.run(
-            req.command, shell=True, text=True,
-            capture_output=True, timeout=120,
-            cwd=work_dir
-        )
-        out = res.stdout + res.stderr
-        return {
-            "success": res.returncode == 0,
-            "exit_code": res.returncode,
-            "output": out.strip() if out.strip() else "(Command finished with no output)"
-        }
-    except Exception as e:
-        return {"success": False, "exit_code": -1, "output": str(e)}
-
-# ---------------------------------------------------------------------
-# Web Search & Memories
-# ---------------------------------------------------------------------
-def search_duckduckgo(query, max_results=3):
-    try:
-        results = list(DDGS().text(query, max_results=max_results))
-        formatted = []
-        for i, r in enumerate(results, 1):
-            formatted.append({
-                "index": i,
-                "title": r.get("title", ""),
-                "url": r.get("href", ""),
-                "snippet": r.get("body", "")
-            })
-        return formatted
-    except Exception:
-        return []
-
 def load_memories():
-    if not os.path.exists(MEMORY_FILE):
-        # Start with an empty memory - user adds their own context
-        defaults = []
-        with open(MEMORY_FILE, "w") as f:
-            json.dump(defaults, f, indent=2)
-        return defaults
-    try:
-        with open(MEMORY_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return []
+    return storage.list_memories()
 
 @app.get("/api/memories")
 def get_memories():
@@ -1282,111 +1364,35 @@ def get_memories():
 
 class MemoryPayload(BaseModel):
     content: str
+    workspace: Optional[str] = ""
 
 @app.post("/api/memories")
 def add_memory_endpoint(payload: MemoryPayload):
-    mems = load_memories()
-    new_mem = {"id": str(uuid.uuid4())[:8], "content": payload.content}
-    mems.append(new_mem)
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(mems, f, indent=2)
-    return new_mem
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Memory content cannot be empty")
+    return storage.add_memory(str(uuid.uuid4())[:8], content, payload.workspace or "")
 
 def load_history() -> List[Dict[str, Any]]:
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return list(data.values())
-            return []
-    except Exception:
-        return []
+    return [storage.get_session(item["id"]) for item in storage.list_sessions()]
 
 def save_history(history: List[Dict[str, Any]]):
-    try:
-        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print("Failed to save history:", e)
+    raise RuntimeError("Direct whole-history writes are disabled; use the transactional storage API")
 
 def append_to_session(session_id: str, role: str, content: str, workspace: str = "", thinking_seconds: float = None):
-    hist = load_history()
-    sess = None
-    for s in hist:
-        if s.get("id") == session_id:
-            sess = s
-            break
-    
-    now = int(time.time())
-    if sess is None:
-        clean_title = content.strip().replace("\n", " ")[:36]
-        if len(content.strip()) > 36:
-            clean_title += "..."
-        sess = {
-            "id": session_id,
-            "title": clean_title or "New Chat",
-            "workspace": workspace or "",
-            "created_at": now,
-            "updated_at": now,
-            "messages": []
-        }
-        hist.insert(0, sess)
-    else:
-        sess["updated_at"] = now
-        if workspace and not sess.get("workspace"):
-            sess["workspace"] = workspace
-        if role == "user" and (sess.get("title") in ["New Chat", "New Session", "Conversation"] or not sess.get("title")):
-            clean_title = content.strip().replace("\n", " ")[:36]
-            if len(content.strip()) > 36:
-                clean_title += "..."
-            sess["title"] = clean_title
-            
-    msg_entry = {
-        "role": role,
-        "content": content,
-        "timestamp": now
-    }
-    if thinking_seconds is not None:
-        msg_entry["thinking_seconds"] = thinking_seconds
-        
-    sess["messages"].append(msg_entry)
-    save_history(hist)
-    return sess
+    return storage.append_message(session_id, role, content, workspace, thinking_seconds)
 
 @app.get("/api/history")
 def get_history_sessions():
-    hist = load_history()
-    hist.sort(key=lambda s: s.get("updated_at", s.get("created_at", 0)), reverse=True)
-    return [
-        {
-            "id": s.get("id"),
-            "title": s.get("title", "Conversation"),
-            "created_at": s.get("created_at", 0),
-            "updated_at": s.get("updated_at", 0),
-            "message_count": len(s.get("messages", [])),
-            "workspace": s.get("workspace", "")
-        }
-        for s in hist if s.get("id")
-    ]
+    return storage.list_sessions()
 
 @app.get("/api/history/{session_id}")
 def get_session(session_id: str):
-    hist = load_history()
-    for s in hist:
-        if s.get("id") == session_id:
-            return s
-    return {"id": session_id, "title": "New Session", "workspace": "", "messages": []}
+    return storage.get_session(session_id)
 
 @app.delete("/api/history/{session_id}")
 def delete_session(session_id: str):
-    hist = load_history()
-    hist = [s for s in hist if s.get("id") != session_id]
-    save_history(hist)
+    storage.delete_session(session_id)
     return {"success": True}
 
 class TitlePayload(BaseModel):
@@ -1394,26 +1400,24 @@ class TitlePayload(BaseModel):
 
 @app.post("/api/history/{session_id}/title")
 def rename_session(session_id: str, payload: TitlePayload):
-    hist = load_history()
-    for s in hist:
-        if s.get("id") == session_id:
-            s["title"] = payload.title.strip()
-            save_history(hist)
-            return {"success": True, "title": s["title"]}
-    return {"error": "Session not found"}
+    try:
+        if storage.rename_session(session_id, payload.title):
+            return {"success": True, "title": payload.title.strip()}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    raise HTTPException(status_code=404, detail="Session not found")
 
 @app.delete("/api/memories/{mem_id}")
 def delete_memory_endpoint(mem_id: str):
-    mems = load_memories()
-    mems = [m for m in mems if m["id"] != mem_id]
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(mems, f, indent=2)
+    storage.delete_memory(mem_id)
     return {"success": True}
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        content = await file.read()
+        content = await file.read(10 * 1024 * 1024 + 1)
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Attachments are limited to 10 MiB")
         filename_lower = file.filename.lower()
         if filename_lower.endswith(".pdf"):
             import io
@@ -1465,6 +1469,7 @@ def get_stats():
 class SwitchModelPayload(BaseModel):
     provider: str
     model: str
+    tier: Optional[str] = None
 
 class PullModelPayload(BaseModel):
     model: str
@@ -1490,271 +1495,31 @@ class ProviderUpdatePayload(BaseModel):
 @app.get("/api/models")
 def get_available_models():
     cfg = load_provider_config()
-    ollama_url = cfg["providers"].get("ollama", {}).get("base_url", "http://127.0.0.1:11434")
-    local_models = fetch_ollama_models(ollama_url)
-
-    cloud_models = []
-    # 1. Zero-Cost AI Cluster (Auto-Failover Pool)
-    cloud_models.append({
-        "provider": "free_pool",
-        "model": "auto-failover",
-        "name": "⚡ Free Auto-Pool (Auto-Failover)",
-        "category": "free_tier"
-    })
-
-    # 2. High-Volume Free Providers
-    free_labels = {
-        "gemini": "Google Gemini (1.5B tokens/mo)",
-        "cerebras": "Cerebras (1M tokens/day @ 2000 t/s)",
-        "groq": "Groq Cloud (Llama 3.3 70B)",
-        "github_models": "GitHub Models (GPT-4o & Llama 3.3)"
-    }
-    for fp_id, fp_label in free_labels.items():
-        fp_data = cfg.get("providers", {}).get(fp_id, {})
-        has_key = bool((fp_data.get("api_key") or "").strip())
-        if fp_data.get("enabled") and has_key:
-            cloud_models.append({
-                "provider": fp_id,
-                "model": fp_data.get("model", ""),
-                "name": f"{fp_data.get('model', '')} - {fp_label}",
-                "category": "free_tier"
-            })
-
-    # Built-in standard cloud providers - only show if enabled AND an API key is configured
-    for p_id in ["openrouter", "openai", "anthropic"]:
-        p_data = cfg.get("providers", {}).get(p_id, {})
-        has_key = bool((p_data.get("api_key") or "").strip())
-        if p_data.get("enabled") and has_key:
-            cloud_models.append({
-                "provider": p_id,
-                "model": p_data.get("model", ""),
-                "name": f"{p_data.get('model', '')} ({p_id.capitalize()})",
-                "category": "cloud"
-            })
-
-    # Custom 3rd-party providers / proxies
-    for cp in cfg.get("custom_providers", []):
-        if cp.get("enabled"):
-            cp_id = cp.get("id", "custom")
-            cp_name = cp.get("name", "Custom Proxy")
-            cp_model = cp.get("model", "")
-            cp_type = cp.get("type", "openai")
-            cloud_models.append({
-                "provider": f"custom_{cp_id}",
-                "model": cp_model,
-                "name": f"{cp_model} ({cp_name})",
-                "category": "custom",
-                "custom_id": cp_id,
-                "custom_name": cp_name,
-                "custom_type": cp_type
-            })
-
-    # Curated fast models (sub-second target, ready without keys)
-    fast_models = [
-        {
-            "provider": "free_pool",
-            "model": "fast-auto",
-            "name": "⚡ Auto Fast (Sub-second)",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "⚡ Instant",
-            "description": "Auto-routes to the fastest verified live engine"
-        },
-        {
-            "provider": "kilo",
-            "model": "poolside/laguna-s-2.1:free",
-            "name": "Kilo: Poolside Laguna S 2.1",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "1.6s TTFB",
-            "description": "Fastest verified frontier code intelligence model"
-        },
-        {
-            "provider": "kilo",
-            "model": "inclusionai/ling-3.0-flash-sante:free",
-            "name": "Kilo: Ling 3.0 Flash",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "1.9s TTFB",
-            "description": "Ultra-snappy instructions and rapid file edits"
-        },
-        {
-            "provider": "kilo",
-            "model": "liquid/lfm-2.5-2.6b:free",
-            "name": "Kilo: Liquid LFM 2.5 2.6B",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "2.0s TTFB",
-            "description": "Ultra-lightweight edge model for bash commands"
-        },
-        {
-            "provider": "kilo",
-            "model": "cohere/north-mini-code:free",
-            "name": "Kilo: Cohere North Mini Code",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "2.1s TTFB",
-            "description": "Specialized coding intelligence and syntax fixes"
-        },
-        {
-            "provider": "kilo",
-            "model": "stepfun/step-3.7-flash:free",
-            "name": "Kilo: StepFun 3.7 Flash",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "3.6s TTFB",
-            "description": "Quick logical verification and snappy completions"
-        },
-        {
-            "provider": "kilo",
-            "model": "poolside/laguna-xs-2.1:free",
-            "name": "Kilo: Poolside Laguna XS 2.1",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "Frontier Code",
-            "description": "Low-latency syntax verification and tool assistance"
-        },
-        {
-            "provider": "kilo",
-            "model": "kilo-auto/free",
-            "name": "Kilo: Auto Free Router",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "200 req/hr",
-            "description": "Dynamic low-latency anonymous routing"
-        }
-    ]
-
-    # Curated complex models (high capability, large context, ready without keys)
-    complex_models = [
-        {
-            "provider": "free_pool",
-            "model": "complex-auto",
-            "name": "🧠 Auto Complex (Deep Reasoning)",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "🧠 Deep Logic",
-            "description": "Multi-file refactoring, large context, and whole-project planning"
-        },
-        {
-            "provider": "kilo",
-            "model": "dots-studio/dots-3-note-preview:free",
-            "name": "Kilo: Dots 3 Note Preview",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "512k Context",
-            "description": "512,000 token context comprehension (2.5s TTFB)"
-        },
-        {
-            "provider": "kilo",
-            "model": "nvidia/nemotron-3-super-120b-a12b:free",
-            "name": "Kilo: Nemotron 3 Super 120B",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "120B Flagship",
-            "description": "Frontier 120B parameter model for deep architectural reasoning (3.3s TTFB)"
-        },
-        {
-            "provider": "kilo",
-            "model": "stepfun/step-3.7-flash:free",
-            "name": "Kilo: StepFun 3.7 Flash",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "262k Context",
-            "description": "Chain-of-thought logic and multi-step reasoning (3.6s TTFB)"
-        },
-        {
-            "provider": "kilo",
-            "model": "cohere/north-mini-code:free",
-            "name": "Kilo: Cohere North Mini Code",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "256k Context",
-            "description": "Fine-tuned software engineering model for code architecture"
-        },
-        {
-            "provider": "kilo",
-            "model": "nvidia/nemotron-3.5-lightning:free",
-            "name": "Kilo: Nemotron 3.5 Lightning",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "1M Context",
-            "description": "1,000,000 token context window for full codebase reasoning"
-        },
-        {
-            "provider": "kilo",
-            "model": "openrouter/free",
-            "name": "Kilo: OpenRouter Free",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "Multi-Engine",
-            "description": "Multi-model public cluster for diverse problem solving"
-        },
-        {
-            "provider": "kilo",
-            "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-            "name": "Kilo: Nemotron 3 Ultra 550B",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "550B Heavy",
-            "description": "Massive 550-billion parameter reasoning engine (High Latency)"
-        }
-    ]
-
-    # Add local ollama models to both tiers
-    for lm in local_models:
-        fast_models.append({
-            "provider": "ollama",
-            "model": lm["name"],
-            "name": f"Local Ollama: {lm['name']}",
-            "tier": "fast",
-            "is_keyless": True,
-            "badge": "Offline Local",
-            "description": "Private, zero-network local execution"
-        })
-        complex_models.append({
-            "provider": "ollama",
-            "model": lm["name"],
-            "name": f"Local Ollama: {lm['name']}",
-            "tier": "complex",
-            "is_keyless": True,
-            "badge": "Offline Heavy",
-            "description": "Full local parameters for private code analysis"
-        })
-
-    # Add configured cloud providers if developer keys exist
-    for p_id, p_label in free_labels.items():
-        p_data = cfg.get("providers", {}).get(p_id, {})
-        has_key = bool((p_data.get("api_key") or "").strip())
-        if p_data.get("enabled") and has_key:
-            target_tier = "fast" if p_id in ["cerebras", "groq"] else "complex"
-            m_item = {
-                "provider": p_id,
-                "model": p_data.get("model", ""),
-                "name": f"{p_data.get('model', '')} - {p_label}",
-                "tier": target_tier,
-                "is_keyless": False,
-                "badge": "Free Cloud Key"
-            }
-            if target_tier == "fast":
-                fast_models.append(m_item)
-            else:
-                complex_models.append(m_item)
-
+    providers = cfg.get("providers", {})
+    ollama = providers.get("ollama", {})
+    local_models: List[Dict[str, Any]] = []
+    if ollama.get("enabled"):
+        local_models = fetch_ollama_models(ollama.get("base_url", "http://127.0.0.1:11434"))
+    fast_models, complex_models = build_model_catalog(cfg, local_models)
     return {
-        "active_provider": cfg.get("active_provider", "ollama"),
-        "active_model": cfg.get("active_model", "qwen2.5:14b"),
-        "local_models": local_models,
-        "cloud_models": cloud_models,
+        "active_provider": cfg.get("active_provider", "free_pool"),
+        "active_model": cfg.get("active_model", "fast-auto"),
+        "active_tier": cfg.get("active_tier", "fast"),
         "fast_models": fast_models,
-        "complex_models": complex_models
+        "complex_models": complex_models,
+        "local_models": local_models,
     }
+
 
 @app.post("/api/models/switch")
 def switch_active_model(payload: SwitchModelPayload):
     cfg = load_provider_config()
+    if payload.tier not in {None, "fast", "complex"}:
+        raise HTTPException(status_code=400, detail="Tier must be 'fast' or 'complex'")
     cfg["active_provider"] = payload.provider
     cfg["active_model"] = payload.model
+    if payload.tier:
+        cfg["active_tier"] = payload.tier
     if payload.provider in cfg["providers"]:
         cfg["providers"][payload.provider]["model"] = payload.model
         cfg["providers"][payload.provider]["enabled"] = True
@@ -1797,6 +1562,7 @@ def get_provider_settings():
         else:
             p_info["has_key"] = False
             p_info["masked_key"] = ""
+        p_info.pop("api_key", None)
 
     for cp in safe_cfg.get("custom_providers", []):
         key = cp.get("api_key", "")
@@ -1806,6 +1572,7 @@ def get_provider_settings():
         else:
             cp["has_key"] = False
             cp["masked_key"] = ""
+        cp.pop("api_key", None)
     return safe_cfg
 
 @app.post("/api/settings/providers")
@@ -1819,17 +1586,26 @@ def update_provider_settings(payload: ProviderUpdatePayload):
     if payload.providers:
         for p_id, incoming in payload.providers.items():
             if p_id in cfg["providers"]:
-                new_key = incoming.get("api_key", "")
+                clean = {key: value for key, value in incoming.items() if key in {"enabled", "base_url", "model", "api_key"}}
+                new_key = clean.get("api_key", "")
                 if not new_key or "..." in new_key or "•••" in new_key:
-                    incoming["api_key"] = cfg["providers"][p_id].get("api_key", "")
-                cfg["providers"][p_id].update(incoming)
+                    clean["api_key"] = cfg["providers"][p_id].get("api_key", "")
+                if clean.get("base_url") and urlparse(str(clean["base_url"])).scheme not in {"http", "https"}:
+                    raise HTTPException(status_code=400, detail=f"Invalid provider URL for {p_id}")
+                cfg["providers"][p_id].update(clean)
 
     if payload.custom_providers is not None:
         existing_keys = {cp.get("id"): cp.get("api_key", "") for cp in cfg.get("custom_providers", [])}
         updated_custom = []
-        for cp in payload.custom_providers:
-            c_id = cp.get("id") or str(uuid.uuid4())[:8]
+        for incoming in payload.custom_providers[:20]:
+            cp = {key: value for key, value in incoming.items() if key in {"id", "name", "type", "enabled", "base_url", "model", "api_key"}}
+            c_id = str(cp.get("id") or uuid.uuid4().hex[:8])[:64]
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", c_id):
+                raise HTTPException(status_code=400, detail="Custom provider IDs may contain letters, numbers, underscores, and hyphens")
             cp["id"] = c_id
+            cp["type"] = "anthropic" if cp.get("type") == "anthropic" else "openai"
+            if not cp.get("base_url") or urlparse(str(cp["base_url"])).scheme not in {"http", "https"}:
+                raise HTTPException(status_code=400, detail=f"Invalid custom provider URL for {c_id}")
             new_key = cp.get("api_key", "")
             if (not new_key or "..." in new_key or "•••" in new_key) and c_id in existing_keys:
                 cp["api_key"] = existing_keys[c_id]
@@ -1837,15 +1613,25 @@ def update_provider_settings(payload: ProviderUpdatePayload):
         cfg["custom_providers"] = updated_custom
 
     save_provider_config(cfg)
-    return {"success": True, "config": cfg}
+    return {"success": True, "config": get_provider_settings()}
 
 @app.post("/api/settings/providers/test")
 def test_provider_connection(payload: TestProviderPayload):
     p_id = payload.provider
+    cfg = load_provider_config()
+    if p_id.startswith("custom_"):
+        custom_id = p_id[7:]
+        profile = next((item for item in cfg.get("custom_providers", []) if item.get("id") == custom_id), {})
+    else:
+        profile = cfg.get("providers", {}).get(p_id, {})
+    base_url = (payload.base_url or profile.get("base_url") or "").strip()
+    api_key = payload.api_key or profile.get("api_key") or ""
+    model = payload.model or profile.get("model") or ""
+    provider_type = payload.provider_type or profile.get("type") or ("anthropic" if p_id == "anthropic" else "openai")
     t0 = time.time()
     try:
         if p_id == "ollama":
-            url = (payload.base_url or "http://127.0.0.1:11434").rstrip("/")
+            url = (base_url or "http://127.0.0.1:11434").rstrip("/")
             req = urllib.request.Request(f"{url}/api/tags")
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
@@ -1853,24 +1639,24 @@ def test_provider_connection(payload: TestProviderPayload):
             return {"success": True, "latency_ms": ms, "message": f"Connected to Ollama ({len(data.get('models', []))} models installed)"}
 
         # Check protocol type
-        p_type = (payload.provider_type or ("anthropic" if p_id == "anthropic" else "openai")).lower()
+        p_type = provider_type.lower()
         if p_id == "anthropic" or p_type == "anthropic":
-            base = (payload.base_url or "https://api.anthropic.com/v1").rstrip("/")
+            base = (base_url or "https://api.anthropic.com/v1").rstrip("/")
             url = f"{base}/messages" if not base.endswith("/messages") else base
             body = json.dumps({
-                "model": payload.model or "claude-3-5-haiku-20241022",
+                "model": model or "claude-3-5-haiku-20241022",
                 "max_tokens": 5,
                 "messages": [{"role": "user", "content": "hi"}]
             }).encode("utf-8")
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": payload.api_key or "",
+                "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
                 "User-Agent": STANDARD_USER_AGENT,
                 "Accept": "application/json"
             }
-            if payload.api_key:
-                headers["Authorization"] = f"Bearer {payload.api_key}"
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
             req = urllib.request.Request(
                 url,
                 data=body,
@@ -1882,11 +1668,11 @@ def test_provider_connection(payload: TestProviderPayload):
             return {"success": True, "latency_ms": ms, "message": f"Successfully connected to Anthropic API ({ms}ms)"}
 
         else:
-            url = (payload.base_url or "https://api.openai.com/v1").rstrip("/")
+            url = (base_url or "https://api.openai.com/v1").rstrip("/")
             if not url.endswith("/chat/completions"):
                 url = f"{url}/chat/completions"
             body = json.dumps({
-                "model": payload.model or ("gpt-4o-mini" if p_id == "openai" else (payload.model or "gpt-4o-mini")),
+                "model": model or "gpt-4o-mini",
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 5
             }).encode("utf-8")
@@ -1895,8 +1681,8 @@ def test_provider_connection(payload: TestProviderPayload):
                 data=body,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {payload.api_key}",
-                    "x-api-key": payload.api_key or "",
+                    "Authorization": f"Bearer {api_key}",
+                    "x-api-key": api_key,
                     "User-Agent": STANDARD_USER_AGENT,
                     "Accept": "application/json"
                 }
@@ -2103,453 +1889,21 @@ def probe_provider_endpoint(payload: ProbeProviderPayload):
         "error": "Could not connect to provider. Verify the Base URL and API key."
     }
 
-def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict, tier: str = "fast"):
-    custom_profile = None
-    if provider.startswith("custom_"):
-        c_id = provider[7:]
-        for cp in cfg.get("custom_providers", []):
-            if cp.get("id") == c_id:
-                custom_profile = cp
-                break
-        if not custom_profile:
-            yield ("error", f"Custom provider '{provider}' not found in configuration")
-            return
-        p_info = custom_profile
-        effective_provider = custom_profile.get("type", "openai")
-    else:
-        p_info = cfg.get("providers", {}).get(provider, {})
-        effective_provider = provider
+def stream_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict, tier: str = "fast", local_only: bool = False):
+    yield from provider_stream_llm_turn(provider, model, messages, tools, cfg, tier=tier, local_only=local_only)
 
-    if effective_provider == "ollama":
-        base_url = p_info.get("base_url", "http://127.0.0.1:11434").rstrip("/")
-        payload = {
-            "model": model,
-            "messages": messages,
-            "tools": tools,
-            "stream": True
-        }
-        accumulated_text = ""
-        accumulated_tools = []
-        try:
-            req_obj = urllib.request.Request(
-                f"{base_url}/api/chat",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req_obj, timeout=180) as resp:
-                for line in resp:
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line.decode("utf-8"))
-                    except:
-                        continue
-                    msg = chunk.get("message", {})
-                    t_calls = msg.get("tool_calls")
-                    if t_calls:
-                        for tc in t_calls:
-                            accumulated_tools.append(tc)
-                            yield ("tool_call", tc)
-                    token = msg.get("content", "")
-                    if token:
-                        accumulated_text += token
-                        yield ("token", token)
-                    if chunk.get("done"):
-                        break
-            # Tool-Call Rescue: extract inline XML/function dialects if structured calls missing
-            if not accumulated_tools and accumulated_text:
-                clean_text, rescued_calls = rescue_tool_calls(accumulated_text)
-                if rescued_calls:
-                    for rtc in rescued_calls:
-                        parsed_rtc = dict(rtc)
-                        try:
-                            parsed_rtc["function"]["arguments"] = json.loads(rtc["function"]["arguments"])
-                        except:
-                            pass
-                        accumulated_tools.append(parsed_rtc)
-                        yield ("tool_call", parsed_rtc)
-                    accumulated_text = clean_text
-            yield ("done", {"content": accumulated_text, "tool_calls": accumulated_tools})
-        except Exception as err:
-            yield ("error", str(err))
 
-    elif effective_provider == "free_pool":
-        # Candidate providers for the free auto-failover pool divided by user tier
-        candidates = []
+agent_runtime = AgentRuntime(
+    provider_stream=stream_llm_turn,
+    tool_executor=execute_agent_tool,
+    tools=TOOLS_SPEC,
+    web_tools=WEB_TOOLS_SPEC,
+    storage=storage,
+    system_intro=SYS_INTRO,
+    agent_name=AGENT_NAME,
+)
 
-        if tier == "complex":
-            # 1. Configured high-capability cloud providers with developer keys
-            for p in ["gemini", "github_models", "openrouter", "cerebras", "groq"]:
-                p_data = cfg.get("providers", {}).get(p, {})
-                if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
-                    candidates.append((p, p_data.get("model", "")))
 
-            # 2. Keyless Public Complex Gateways (100% verified live endpoints)
-            candidates.append(("kilo", "dots-studio/dots-3-note-preview:free"))
-            candidates.append(("kilo", "nvidia/nemotron-3-super-120b-a12b:free"))
-            candidates.append(("kilo", "stepfun/step-3.7-flash:free"))
-            candidates.append(("kilo", "cohere/north-mini-code:free"))
-            candidates.append(("kilo", "nvidia/nemotron-3.5-lightning:free"))
-            candidates.append(("kilo", "openrouter/free"))
-            candidates.append(("kilo", "kilo-auto/free"))
-
-            # 3. Local High-Parameter Safety Net
-            ollama_cfg = cfg.get("providers", {}).get("ollama", {})
-            if ollama_cfg.get("enabled", True):
-                local_m = ollama_cfg.get("model", "qwen2.5:14b")
-                candidates.append(("ollama", local_m))
-
-        else:
-            # ⚡ Fast Tier Prioritization (Target Latency: < 2.0s)
-            # 1. Ultra-Fast Cloud with Configured Developer Keys (2000 tok/s)
-            for p in ["cerebras", "groq", "gemini", "github_models"]:
-                p_data = cfg.get("providers", {}).get(p, {})
-                if p_data.get("enabled", True) and (p_data.get("api_key") or "").strip():
-                    candidates.append((p, p_data.get("model", "")))
-
-            # 2. Keyless Public Gateway Fast Models (All sub-3s verified live)
-            candidates.append(("kilo", "poolside/laguna-s-2.1:free"))
-            candidates.append(("kilo", "inclusionai/ling-3.0-flash-sante:free"))
-            candidates.append(("kilo", "liquid/lfm-2.5-2.6b:free"))
-            candidates.append(("kilo", "cohere/north-mini-code:free"))
-            candidates.append(("kilo", "stepfun/step-3.7-flash:free"))
-            candidates.append(("kilo", "poolside/laguna-xs-2.1:free"))
-            candidates.append(("kilo", "kilo-auto/free"))
-
-            # 3. Local Ollama Safety Net
-            ollama_cfg = cfg.get("providers", {}).get("ollama", {})
-            if ollama_cfg.get("enabled", True):
-                local_m = ollama_cfg.get("model", "qwen2.5:14b")
-                candidates.append(("ollama", local_m))
-
-        # Check if local FreeLLMAPI gateway is enabled
-        fllm_cfg = cfg.get("providers", {}).get("freellmapi", {})
-        if fllm_cfg.get("enabled", False):
-            candidates.insert(1, ("freellmapi", fllm_cfg.get("model", "auto")))
-
-        if not candidates:
-            yield ("error", "No AI providers available. Please configure a free key in Settings -> AI Providers or start Ollama locally.")
-            return
-
-        last_error = ""
-        for cand_provider, cand_model in candidates:
-            cand_succeeded = False
-            streamed_tokens = 0
-            try:
-                for kind, payload in stream_llm_turn(cand_provider, cand_model, messages, tools, cfg, tier=tier):
-                    if kind == "error":
-                        last_error = f"{cand_provider}: {payload}"
-                        # In auto-failover, any failure before streaming tokens transitions to the next provider
-                        if streamed_tokens == 0:
-                            break
-                        else:
-                            yield ("error", f"Stream interrupted on {cand_provider}: {payload}")
-                            return
-                    else:
-                        cand_succeeded = True
-                        if kind == "token":
-                            streamed_tokens += 1
-                        yield (kind, payload)
-                if cand_succeeded:
-                    return
-            except Exception as e:
-                last_error = f"{cand_provider}: {str(e)}"
-                continue
-
-        yield ("error", f"All free pool providers exhausted. Last error: {last_error}.")
-        return
-
-    elif effective_provider in ["openai", "openrouter", "gemini", "cerebras", "groq", "github_models", "aihorde", "freellmapi", "pollinations", "kilo"]:
-        p_info = cfg.get("providers", {}).get(effective_provider, {})
-        api_key = p_info.get('api_key', '').strip()
-        if effective_provider == "aihorde" and not api_key:
-            api_key = "0000000000"
-        elif effective_provider == "freellmapi" and not api_key:
-            api_key = "freellmapi-local"
-        elif effective_provider in ["pollinations", "kilo"]:
-            if api_key in ["kilo-free", "pollinations-free"]:
-                api_key = ""
-        elif effective_provider == "openai" and not api_key:
-            yield ("error", "OpenAI API key missing. Please add your key in Settings -> AI Providers -> OpenAI, or switch to ⚡ Free Auto-Pool.")
-            return
-
-        base_url = p_info.get("base_url", "https://api.openai.com/v1").rstrip("/")
-        endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": True
-        }
-        # Pollinations free tier does not accept tools parameter; inline tool rescue handles dialect
-        if tools and effective_provider != "pollinations":
-            payload["tools"] = tools
-
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": STANDARD_USER_AGENT,
-            "Accept": "text/event-stream, application/json"
-        }
-        if api_key and api_key not in ["kilo-free", "pollinations-free"]:
-            headers["Authorization"] = f"Bearer {api_key}"
-            headers["x-api-key"] = api_key
-        if effective_provider == "openrouter":
-            headers["HTTP-Referer"] = "https://github.com/vexp/claude-code-ide"
-            headers["X-Title"] = "VexP Code IDE"
-
-        accumulated_text = ""
-        tool_calls_map = {}
-        turn_timeout = 25 if tier == "fast" else 75
-        if effective_provider == "ollama":
-            turn_timeout = 180
-        try:
-            req_obj = urllib.request.Request(
-                endpoint,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers
-            )
-            with urllib.request.urlopen(req_obj, timeout=turn_timeout) as resp:
-                for line in resp:
-                    txt = line.decode("utf-8").strip()
-                    if not txt or not txt.startswith("data:"):
-                        continue
-                    data_str = txt[5:].strip()
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                    except:
-                        continue
-                    choices = chunk.get("choices", [])
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta", {})
-                    content_piece = delta.get("content")
-                    if content_piece:
-                        accumulated_text += content_piece
-                        yield ("token", content_piece)
-                    t_calls = delta.get("tool_calls")
-                    if t_calls:
-                        for tc in t_calls:
-                            idx = tc.get("index", 0)
-                            if idx not in tool_calls_map:
-                                tool_calls_map[idx] = {
-                                    "id": tc.get("id", f"call_{idx}"),
-                                    "function": {
-                                        "name": tc.get("function", {}).get("name", ""),
-                                        "arguments": ""
-                                    }
-                                }
-                            if tc.get("function", {}).get("name"):
-                                tool_calls_map[idx]["function"]["name"] = tc["function"]["name"]
-                            if tc.get("function", {}).get("arguments"):
-                                tool_calls_map[idx]["function"]["arguments"] += tc["function"]["arguments"]
-
-            final_tool_calls = []
-            for tc in tool_calls_map.values():
-                args_str = tc["function"]["arguments"]
-                try:
-                    tc["function"]["arguments"] = json.loads(args_str)
-                except:
-                    pass
-                final_tool_calls.append(tc)
-                yield ("tool_call", tc)
-
-            # Tool-Call Rescue: extract inline XML/function dialects if structured calls missing
-            if not final_tool_calls and accumulated_text:
-                clean_text, rescued_calls = rescue_tool_calls(accumulated_text)
-                if rescued_calls:
-                    for rtc in rescued_calls:
-                        parsed_rtc = dict(rtc)
-                        try:
-                            parsed_rtc["function"]["arguments"] = json.loads(rtc["function"]["arguments"])
-                        except:
-                            pass
-                        final_tool_calls.append(parsed_rtc)
-                        yield ("tool_call", parsed_rtc)
-                    accumulated_text = clean_text
-
-            yield ("done", {"content": accumulated_text, "tool_calls": final_tool_calls})
-        except urllib.error.HTTPError as he:
-            err_msg = str(he)
-            try:
-                raw_body = he.read().decode("utf-8", errors="ignore")
-                if raw_body:
-                    try:
-                        err_json = json.loads(raw_body)
-                        err_msg = err_json.get("error", {}).get("message") or err_json.get("message") or raw_body[:250]
-                    except:
-                        err_msg = raw_body[:250]
-            except:
-                pass
-
-            # Failover rescue for 404/503/429 on free providers when no tokens were yielded yet
-            if not accumulated_text and he.code in [404, 429, 502, 503, 504] and effective_provider in ["kilo", "pollinations"]:
-                fallback_provider = "pollinations" if effective_provider == "kilo" else "kilo"
-                fallback_model = "openai-fast" if fallback_provider == "pollinations" else "kilo-auto/free"
-                yield ("token", f"> ℹ️ *Model `{effective_provider}:{model}` was unavailable (HTTP {he.code}). Seamlessly routing through resilient engine `{fallback_provider}:{fallback_model}`...*\n\n")
-                try:
-                    for f_kind, f_payload in stream_llm_turn(fallback_provider, fallback_model, messages, tools, cfg, tier=tier):
-                        yield (f_kind, f_payload)
-                    return
-                except Exception as fb_err:
-                    err_msg += f" (Fallback failed: {fb_err})"
-
-            yield ("error", f"Provider HTTP {he.code} Error: {err_msg}")
-        except Exception as err:
-            yield ("error", str(err))
-
-    elif effective_provider == "anthropic":
-        base_url = p_info.get("base_url", "https://api.anthropic.com/v1").rstrip("/")
-        endpoint = f"{base_url}/messages" if not base_url.endswith("/messages") else base_url
-        system_content = ""
-        anth_msgs = []
-        for m in messages:
-            r = m.get("role")
-            c = m.get("content", "")
-            if r == "system":
-                system_content += c + "\n"
-            elif r == "user":
-                anth_msgs.append({"role": "user", "content": c})
-            elif r == "assistant":
-                anth_msgs.append({"role": "assistant", "content": c or "Processing..."})
-            elif r == "tool":
-                anth_msgs.append({
-                    "role": "user",
-                    "content": f"Tool output: {c}"
-                })
-
-        anth_tools = []
-        for t in tools:
-            fn = t.get("function", {})
-            anth_tools.append({
-                "name": fn.get("name"),
-                "description": fn.get("description"),
-                "input_schema": fn.get("parameters", {"type": "object", "properties": {}})
-            })
-
-        payload = {
-            "model": model,
-            "system": system_content.strip(),
-            "messages": anth_msgs,
-            "max_tokens": 4096,
-            "stream": True
-        }
-        if anth_tools:
-            payload["tools"] = anth_tools
-
-        api_key = p_info.get("api_key", "")
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "User-Agent": STANDARD_USER_AGENT,
-            "Accept": "text/event-stream, application/json"
-        }
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        accumulated_text = ""
-        current_tool_id = ""
-        current_tool_name = ""
-        current_tool_json = ""
-        final_tool_calls = []
-
-        try:
-            req_obj = urllib.request.Request(
-                endpoint,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers
-            )
-            with urllib.request.urlopen(req_obj, timeout=180) as resp:
-                for line in resp:
-                    txt = line.decode("utf-8").strip()
-                    if not txt.startswith("data:"):
-                        continue
-                    data_str = txt[5:].strip()
-                    try:
-                        chunk = json.loads(data_str)
-                    except:
-                        continue
-                    ev_type = chunk.get("type", "")
-                    if ev_type == "content_block_start":
-                        cb = chunk.get("content_block", {})
-                        if cb.get("type") == "tool_use":
-                            current_tool_id = cb.get("id", "")
-                            current_tool_name = cb.get("name", "")
-                            current_tool_json = ""
-                    elif ev_type == "content_block_delta":
-                        delta = chunk.get("delta", {})
-                        d_type = delta.get("type", "")
-                        if d_type == "text_delta":
-                            text_piece = delta.get("text", "")
-                            accumulated_text += text_piece
-                            yield ("token", text_piece)
-                        elif d_type == "input_json_delta":
-                            current_tool_json += delta.get("partial_json", "")
-                    elif ev_type == "content_block_stop":
-                        if current_tool_name:
-                            try:
-                                parsed_args = json.loads(current_tool_json)
-                            except:
-                                parsed_args = current_tool_json
-                            tc_obj = {
-                                "id": current_tool_id,
-                                "function": {
-                                    "name": current_tool_name,
-                                    "arguments": parsed_args
-                                }
-                            }
-                            final_tool_calls.append(tc_obj)
-                            yield ("tool_call", tc_obj)
-                            current_tool_name = ""
-                            current_tool_id = ""
-                            current_tool_json = ""
-                    elif ev_type == "message_stop":
-                        break
-
-            yield ("done", {"content": accumulated_text, "tool_calls": final_tool_calls})
-        except urllib.error.HTTPError as he:
-            err_msg = str(he)
-            try:
-                raw_body = he.read().decode("utf-8", errors="ignore")
-                if raw_body:
-                    try:
-                        err_json = json.loads(raw_body)
-                        err_msg = err_json.get("error", {}).get("message") or err_json.get("message") or raw_body[:250]
-                    except:
-                        err_msg = raw_body[:250]
-            except:
-                pass
-            yield ("error", f"Provider HTTP {he.code} Error: {err_msg}")
-        except Exception as err:
-            yield ("error", str(err))
-
-    else:
-        yield ("error", f"Unsupported provider: {provider}")
-
-def call_llm_turn(provider: str, model: str, messages: list, tools: list, cfg: dict):
-    full_content = ""
-    tool_calls = []
-    for kind, payload in stream_llm_turn(provider, model, messages, tools, cfg):
-        if kind == "error":
-            return {}, payload
-        elif kind == "token":
-            full_content += payload
-        elif kind == "tool_call":
-            tool_calls.append(payload)
-        elif kind == "done":
-            if isinstance(payload, dict):
-                if not full_content and payload.get("content"):
-                    full_content = payload["content"]
-                if not tool_calls and payload.get("tool_calls"):
-                    tool_calls = payload["tool_calls"]
-    return {
-        "role": "assistant",
-        "content": full_content,
-        "tool_calls": tool_calls
-    }, ""
-
-# ---------------------------------------------------------------------
-# Claude Code Agent Chat (with Active File Context)
 # ---------------------------------------------------------------------
 class ActiveFile(BaseModel):
     name: str
@@ -2557,303 +1911,105 @@ class ActiveFile(BaseModel):
     content: str
     language: Optional[str] = "plaintext"
 
-def check_tool_intent(prompt: str) -> bool:
-    """
-    Determines if the prompt requests active file edits, shell execution, or workspace search.
-    Suppresses tool definitions for pure conversational questions (greetings, explanations, queries).
-    """
-    p = prompt.strip().lower()
-    casual_greetings = {"hi", "hey", "hello", "good morning", "good evening", "howdy", "sup", "yo", "who are you", "what is your name", "what model"}
-    clean_p = re.sub(r'[!.,?]+$', '', p).strip()
-    if clean_p in casual_greetings:
-        return False
-    action_keywords = [
-        "create", "write", "edit", "modify", "update", "refactor", "fix", "delete", "remove",
-        "save", "add", "implement", "build", "run", "execute", "terminal", "command", "test",
-        "bash", "shell", "npm", "pip", "python", "file", "folder", "directory", "diff",
-        "patch", "compile", "lint", "search workspace", "find in file", "read file"
-    ]
-    for kw in action_keywords:
-        if kw in p:
-            return True
-    info_starters = ["what is", "how does", "why is", "explain", "tell me about", "describe", "can you explain", "what are"]
-    if any(p.startswith(s) for s in info_starters) and not any(action in p for action in ["file", "code in", "edit", "fix", "run", "terminal"]):
-        return False
-    if "```" in prompt or "`" in prompt:
-        return True
-    return False
-
 class ChatRequest(BaseModel):
     session_id: str
     prompt: str
     project_path: Optional[str] = None
     active_file: Optional[ActiveFile] = None
     web_search: bool = False
+    web_mode: Optional[str] = "auto"
     attachments: Optional[List[Dict[str, Any]]] = None
     provider: Optional[str] = None
     model: Optional[str] = None
     tier: Optional[str] = "fast"
+    mode: Optional[str] = "code"
+    approval_policy: Optional[str] = "ask"
+    local_only: bool = False
+    run_id: Optional[str] = None
+
+
+def requests_web_research(prompt: str) -> bool:
+    value = prompt.lower()
+    return bool(
+        re.search(r"\b(?:browse|google|web\s+search|search\s+(?:the\s+)?web|search\s+online|internet\s+search|look\s+up\s+online|web\s+access|internet\s+access|access\s+(?:the\s+)?(?:web|internet)|search\s+(?:the\s+)?internet|can\s+you\s+(?:browse|search))\b", value)
+        or re.search(r"\b(?:latest|current|today'?s?)\s+(?:news|price|prices|release|version|schedule|score|scores|weather)\b", value)
+        or re.search(r"\b(?:can|could)\s+you\s+(?:download|install)\b", value)
+        or re.search(r"\b(?:download|install|available|availability|supported|support)\b.{0,80}\b(?:linux|ubuntu|debian|windows|macos|package|app|desktop|software|tool)\b", value)
+    )
 
 @app.post("/api/chat")
 async def chat_stream(req: ChatRequest):
-    memories = load_memories()
-    mem_text = "\n".join([f"- {m['content']}" for m in memories]) if memories else "None."
+    prompt = req.prompt.strip()
+    if not prompt and not req.attachments:
+        raise HTTPException(status_code=400, detail="A prompt or attachment is required")
+    workspace_value = req.project_path or get_active_workspace()
+    workspace = ""
+    if workspace_value:
+        workspace = os.path.abspath(os.path.expanduser(workspace_value))
+        if not os.path.isdir(workspace):
+            raise HTTPException(status_code=400, detail="The selected workspace is not available")
+    if req.mode not in {"ask", "code"}:
+        raise HTTPException(status_code=400, detail="Mode must be 'ask' or 'code'")
+    if req.approval_policy not in {"ask", "workspace", "whole_device"}:
+        raise HTTPException(status_code=400, detail="Approval policy must be 'ask', 'workspace', or 'whole_device'")
+    if req.web_mode not in {"off", "auto", "research"}:
+        raise HTTPException(status_code=400, detail="Web mode must be 'off', 'auto', or 'research'")
 
-    # Dynamic Filesystem Context Detection
-    fs_context = ""
-    target_proj = os.path.abspath(os.path.expanduser(req.project_path or get_active_workspace()))
-
-    # Active workspace contents
-    if os.path.exists(target_proj):
-        try:
-            entries = [f"📁 {d}" if os.path.isdir(os.path.join(target_proj, d)) else f"📄 {d}" 
-                       for d in sorted(os.listdir(target_proj)) if not d.startswith(".")][:30]
-            fs_context += (
-                f"\n\n[CURRENT ACTIVE WORKSPACE]:\n"
-                f"Path: {target_proj}\n"
-                f"Visible items:\n" + "\n".join(entries) + "\n"
-            )
-        except:
-            pass
-
-    # Intent-gated tool and file injection
-    has_tool_intent = check_tool_intent(req.prompt)
-
-    # Active file context injection (Claude Code IDE mode)
-    # Only inject active file when relevant to avoid hijacking greetings or general queries
-    file_context = ""
-    prompt_lower = req.prompt.lower()
-    file_mention_keywords = ["file", "this", "code", "function", "line", "script", "debug", "refactor", "test", "edit", "fix", "look at", "here"]
-    should_include_file = has_tool_intent or any(kw in prompt_lower for kw in file_mention_keywords) or (req.active_file and req.active_file.name.lower() in prompt_lower)
-
-    if req.active_file and req.active_file.content and should_include_file:
-        snippet = req.active_file.content[:40000]
-        file_context = (
-            f"\n\nCURRENTLY OPEN FILE IN IDE:\n"
-            f"File: {req.active_file.name} ({req.active_file.path})\n"
-            f"```{req.active_file.language or 'text'}\n"
-            f"{snippet}\n"
-            f"```\n"
-        )
-
-    # Attachments
-    attachment_context = ""
-    if req.attachments:
-        for att in req.attachments:
-            name = att.get("name", "file")
-            content = att.get("content", "")
-            attachment_context += f"\n--- ATTACHED FILE: {name} ---\n{content}\n-----------------------------\n"
-
-    # 5-Layer Agentic Thinking Harness Engine: TOOLS_SPEC & execute_agent_tool imported from tools.py
-
-    web_sources = []
-    web_context = ""
-    if req.web_search or any(kw in req.prompt.lower() for kw in ["latest", "today", "news", "current", "score", "weather", "recent"]):
-        web_sources = search_duckduckgo(req.prompt, max_results=3)
-        if web_sources:
-            web_context = "\n\n".join([f"Source [{s['title']}] ({s['url']}):\n{s['snippet']}" for s in web_sources])
-
-    system_prompt = f"""{SYS_INTRO}
-You are {AGENT_NAME}, an expert agentic AI software engineer.
-You have direct access to tools (read_file_range, search_files, write_file, apply_file_diff, run_terminal_command) to inspect, create, edit, and test files in the workspace.
-
-ACTIVE WORKSPACE LOCATION:
-Target Project Root: `{target_proj}`
-
-PROJECT CONTEXT & MEMORY:
-{mem_text}
-{fs_context}
-
-CRITICAL RULES:
-1. You are operating directly inside `{target_proj}`. When writing or editing code, ALWAYS create and modify files directly in this active workspace. Never redirect files to arbitrary external folders unless explicitly instructed by the user.
-2. Use `write_file` to create new files or overwrite existing files in the project.
-3. Use `apply_file_diff` to modify specific sections of existing files.
-4. Use `run_terminal_command` to execute tests, linters, or scripts in the active workspace.
-5. When outputting code in markdown, always include the file path in a comment or heading so it can be applied directly to the project.
-6. Keep explanations direct, concise, and technically precise.
-"""
-
-    full_prompt = req.prompt
-    if file_context:
-        full_prompt = f"{file_context}\n\nUser Request: {full_prompt}"
-    if attachment_context:
-        full_prompt = f"User Attached Context:\n{attachment_context}\n\n{full_prompt}"
-    if web_context:
-        full_prompt = f"Live Web Data:\n{web_context}\n\n{full_prompt}"
+    cfg = load_provider_config()
+    provider = req.provider or cfg.get("active_provider", "free_pool")
+    model = req.model or cfg.get("active_model", "fast-auto")
+    run_id = req.run_id or f"run_{uuid.uuid4().hex}"
+    active_file = req.active_file.model_dump() if req.active_file else None
+    explicit_web_request = requests_web_research(prompt)
+    web_enabled = req.web_search or req.web_mode != "off"
+    web_search_required = req.web_search or (
+        req.web_mode != "off" and (explicit_web_request or req.web_mode == "research")
+    )
 
     def event_generator():
-        start_time = time.time()
-        target_ws = os.path.abspath(os.path.expanduser(req.project_path or get_active_workspace()))
-
-        # Save user message to session immediately
-        try:
-            append_to_session(req.session_id, "user", req.prompt, workspace=target_ws)
-        except Exception as err:
-            print("Session save user error:", err)
-
-        ws_items = []
-        if os.path.exists(target_ws):
-            try:
-                ws_items = [d for d in os.listdir(target_ws) if not d.startswith(".")][:30]
-            except:
-                pass
-        git_b = ""
-        try:
-            git_b = subprocess.run(["git", "branch", "--show-current"], cwd=target_ws, capture_output=True, text=True).stdout.strip()
-        except:
-            pass
-
-        branch_name = git_b if git_b else "main"
-        ws_name = os.path.basename(target_ws)
-        active_f = req.active_file.name if (req.active_file and req.active_file.name) else "none"
-
-        # --- LAYER 1: Senses & Workspace Perception ---
-        l1_detail = f"{ws_name} ({len(ws_items)} items, branch: {branch_name}, file: {active_f})"
-        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer1', 'layer': 'Layer 1', 'status': 'done', 'label': 'Workspace Perception', 'detail': l1_detail})}\n\n"
-
-        # --- LAYER 2: Architect Deliberation & Strategy ---
-        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'active', 'label': 'Intent Deliberation & Strategy', 'detail': 'Classifying intent and formulating execution plan...'})}\n\n"
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": full_prompt}
-        ]
-
-        turns = 0
-        max_turns = 3
-        executed_tools_count = 0
-        layer5_activated = False
-        full_session_text = ""
-
-        cfg = load_provider_config()
-        active_provider = req.provider or cfg.get("active_provider", "ollama")
-        active_model = req.model or cfg.get("active_model", "qwen2.5:14b")
-        execution_tier = req.tier or "fast"
-        effective_tools = TOOLS_SPEC if has_tool_intent else []
-
-        while turns < max_turns:
-            turns += 1
-            turn_content = ""
-            turn_tool_calls = []
-            turn_error = ""
-
-            for kind, payload in stream_llm_turn(active_provider, active_model, messages, effective_tools, cfg, tier=execution_tier):
-                if kind == "error":
-                    turn_error = payload
-                    break
-                elif kind == "token":
-                    if not layer5_activated:
-                        if executed_tools_count == 0:
-                            yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'done', 'label': 'Intent Deliberation & Strategy', 'detail': 'Plan selected: Direct neural synthesis'})}\n\n"
-                            yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer3', 'layer': 'Layer 3', 'status': 'done', 'label': 'Action Engine & Tool Dispatch', 'detail': 'Action engine ready (read/diff/shell tools on standby)'})}\n\n"
-                            yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer4', 'layer': 'Layer 4', 'status': 'done', 'label': 'Environmental Observation & Sensors', 'detail': 'Workspace bounds & safety constraints verified'})}\n\n"
-                        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'active', 'label': 'Solution Synthesis & Delivery', 'detail': 'Streaming verified response with editor bindings'})}\n\n"
-                        layer5_activated = True
-
-                    turn_content += payload
-                    full_session_text += payload
-                    yield f"data: {json.dumps({'type': 'token', 'text': payload})}\n\n"
-
-                elif kind == "tool_call":
-                    turn_tool_calls.append(payload)
-
-                elif kind == "done":
-                    if isinstance(payload, dict):
-                        if not turn_content and payload.get("content"):
-                            turn_content = payload["content"]
-                            full_session_text += turn_content
-                        if not turn_tool_calls and payload.get("tool_calls"):
-                            turn_tool_calls = payload["tool_calls"]
-
-            if turn_error:
-                if not full_session_text and executed_tools_count == 0 and active_provider != "free_pool":
-                    # Automatic resilient fallback to free_pool
-                    yield f"data: {json.dumps({'type': 'token', 'text': f'> ℹ️ *Provider `{active_provider}:{active_model}` was unavailable ({turn_error[:80]}). Automatically switching to {execution_tier.upper()} auto-pool...*\\n\\n'})}\n\n"
-                    active_provider = "free_pool"
-                    active_model = "complex-auto" if execution_tier == "complex" else "fast-auto"
-                    continue
-                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'error', 'label': 'Intent Deliberation & Strategy', 'detail': f'Provider synthesis halted: {turn_error[:70]}'})}\n\n"
-                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'error', 'label': 'Solution Synthesis & Delivery', 'detail': f'{turn_error[:70]}'})}\n\n"
-                yield f"data: {json.dumps({'type': 'error', 'text': f'AI Provider Error ({active_provider}:{active_model}): {turn_error}'})}\n\n"
-                try:
-                    append_to_session(req.session_id, "assistant", f"⚠️ **AI Provider Error**: {turn_error}", workspace=target_ws, thinking_seconds=round(time.time() - start_time, 1))
-                except Exception:
-                    pass
-                break
-
-            if turn_tool_calls:
-                executed_tools_count += len(turn_tool_calls)
-                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'done', 'label': 'Intent Deliberation & Strategy', 'detail': f'Plan selected: Tool augmentation required ({len(turn_tool_calls)} calls)'})}\n\n"
-
-                messages.append({
-                    "role": "assistant",
-                    "content": turn_content,
-                    "tool_calls": turn_tool_calls
-                })
-
-                for tc in turn_tool_calls:
-                    func = tc.get("function", {})
-                    name = func.get("name", "")
-                    args = func.get("arguments", {})
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except:
-                            pass
-
-                    # --- LAYER 3: Action Engine & Tool Dispatch ---
-                    yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer3', 'layer': 'Layer 3', 'status': 'active', 'label': 'Action Engine & Tool Dispatch', 'detail': f'Dispatching {name}({str(args)[:60]})'})}\n\n"
-
-                    # --- LAYER 4: Environmental Observation & Feedback Loop ---
-                    obs = execute_agent_tool(name, args, target_ws)
-                    has_err = "error" in obs or obs.get("exit_code", 0) != 0
-
-                    status_val = "done" if not has_err else "error"
-                    detail_val = f"Observed output ({str(obs)[:60]})" if not has_err else f"Self-correcting error: {obs.get('error', '')[:60]}"
-
-                    yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer3', 'layer': 'Layer 3', 'status': 'done', 'label': 'Action Engine & Tool Dispatch', 'detail': f'Invoked {name}'})}\n\n"
-                    yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer4', 'layer': 'Layer 4', 'status': status_val, 'label': 'Environmental Observation & Sensors', 'detail': detail_val})}\n\n"
-
-                    if name in ["write_file", "apply_file_diff"] and not has_err:
-                        yield f"data: {json.dumps({'type': 'file_updated', 'path': obs.get('path', '')})}\n\n"
-
-                    messages.append({
-                        "role": "tool",
-                        "content": json.dumps(obs)
-                    })
-            else:
-                # Direct response or completion after tools
-                if not layer5_activated:
-                    if executed_tools_count == 0:
-                        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer2', 'layer': 'Layer 2', 'status': 'done', 'label': 'Intent Deliberation & Strategy', 'detail': 'Plan selected: Direct neural synthesis'})}\n\n"
-                        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer3', 'layer': 'Layer 3', 'status': 'done', 'label': 'Action Engine & Tool Dispatch', 'detail': 'Action engine ready (read/diff/shell tools on standby)'})}\n\n"
-                        yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer4', 'layer': 'Layer 4', 'status': 'done', 'label': 'Environmental Observation & Sensors', 'detail': 'Workspace bounds & safety constraints verified'})}\n\n"
-                    yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'active', 'label': 'Solution Synthesis & Delivery', 'detail': 'Streaming verified response with editor bindings'})}\n\n"
-
-                # Mark Layer 5 Done
-                yield f"data: {json.dumps({'type': 'harness_step', 'step_id': 'layer5', 'layer': 'Layer 5', 'status': 'done', 'label': 'Solution Synthesis & Delivery', 'detail': 'Streaming verified response with editor bindings'})}\n\n"
-
-                elapsed_sec = round(time.time() - start_time, 1)
-
-                # Save assistant message to session permanently
-                try:
-                    append_to_session(req.session_id, "assistant", full_session_text, workspace=target_ws, thinking_seconds=elapsed_sec)
-                except Exception as err:
-                    print("Session save assistant error:", err)
-
-                break
-
+        for event in agent_runtime.run(
+            session_id=req.session_id,
+            prompt=prompt,
+            workspace=workspace,
+            provider=provider,
+            model=model,
+            tier=req.tier or "fast",
+            mode=req.mode or "code",
+            local_only=req.local_only,
+            active_file=active_file,
+            attachments=req.attachments or [],
+            web_search=web_enabled,
+            web_search_required=web_search_required,
+            approval_policy=req.approval_policy or "ask",
+            config=cfg,
+            run_id=run_id,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+        headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no", "X-Run-ID": run_id},
     )
+
+
+@app.post("/api/runs/{run_id}/cancel")
+def cancel_agent_run(run_id: str):
+    agent_runtime.cancel(run_id)
+    return {"success": True, "run_id": run_id, "status": "cancellation_requested"}
+
+
+class ApprovalPayload(BaseModel):
+    call_id: str
+    approved: bool
+
+
+@app.post("/api/runs/{run_id}/approval")
+def resolve_agent_approval(run_id: str, payload: ApprovalPayload):
+    if not agent_runtime.registry.resolve_approval(run_id, payload.call_id, payload.approved):
+        raise HTTPException(status_code=409, detail="This approval is no longer pending")
+    return {"success": True, "run_id": run_id, "call_id": payload.call_id, "approved": payload.approved}
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
@@ -2866,6 +2022,14 @@ async def serve_ui():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.get("/vexp.svg", include_in_schema=False)
+def serve_favicon():
+    path = os.path.join(FRONTEND_DIST_DIR, "vexp.svg")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Icon build artifact is missing")
+    return FileResponse(path, media_type="image/svg+xml")
 
 if __name__ == "__main__":
     import uvicorn

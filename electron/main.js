@@ -2,10 +2,12 @@ const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
+const net = require('net');
 const { spawn } = require('child_process');
 
 // App root directory
-const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_DIR = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
 
 // Load branding configuration
 let branding = {};
@@ -20,8 +22,11 @@ try {
 
 const APP_NAME = branding.app?.name || 'VexP Code IDE';
 const HOST = branding.server?.host || '127.0.0.1';
-const PORT = branding.server?.port || 7860;
-const SERVER_URL = `http://${HOST}:${PORT}`;
+let port = branding.server?.port || 7860;
+let serverUrl = `http://${HOST}:${port}`;
+const SESSION_TOKEN = crypto.randomBytes(32).toString('base64url');
+const SESSION_FINGERPRINT = crypto.createHash('sha256').update(SESSION_TOKEN).digest('hex').slice(0, 16);
+
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -33,14 +38,35 @@ let isQuitting = false;
  */
 function checkServerHealth() {
   return new Promise((resolve) => {
-    const req = http.get(`${SERVER_URL}/api/version`, (res) => {
-      resolve(res.statusCode === 200);
+    const req = http.get(`${serverUrl}/api/version`, { headers: { 'X-Vexp-Token': SESSION_TOKEN } }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try { resolve(res.statusCode === 200 && JSON.parse(body).session_fingerprint === SESSION_FINGERPRINT); }
+        catch (_) { resolve(false); }
+      });
     });
     req.on('error', () => resolve(false));
     req.setTimeout(1500, () => {
       req.destroy();
       resolve(false);
     });
+  });
+}
+
+function selectAvailablePort(preferredPort) {
+  return new Promise((resolve, reject) => {
+    const preferred = net.createServer();
+    preferred.once('error', () => {
+      const fallback = net.createServer();
+      fallback.once('error', reject);
+      fallback.listen(0, HOST, () => {
+        const address = fallback.address();
+        const selected = typeof address === 'object' && address ? address.port : preferredPort;
+        fallback.close(() => resolve(selected));
+      });
+    });
+    preferred.listen(preferredPort, HOST, () => preferred.close(() => resolve(preferredPort)));
   });
 }
 
@@ -70,22 +96,26 @@ function getPythonExecutable() {
 async function startBackendServer() {
   const isRunning = await checkServerHealth();
   if (isRunning) {
-    console.log(`[Electron] Detected existing server on ${SERVER_URL}`);
+    console.log(`[Electron] Detected owned server on ${serverUrl}`);
     return true;
   }
+  port = await selectAvailablePort(port);
+  serverUrl = `http://${HOST}:${port}`;
 
   const pythonCmd = getPythonExecutable();
   console.log(`[Electron] Starting Python backend server using: ${pythonCmd}...`);
   const pythonScript = path.join(ROOT_DIR, 'backend', 'server.py');
-  const logFile = path.join(ROOT_DIR, 'server.log');
+  const logFile = path.join(app.getPath('userData'), 'server.log');
   const out = fs.openSync(logFile, 'a');
 
   pythonProcess = spawn(pythonCmd, [pythonScript], {
     cwd: ROOT_DIR,
     stdio: ['ignore', out, out],
     detached: false,
-    shell: process.platform === 'win32'
+    shell: false,
+    env: { ...process.env, HOST, PORT: String(port), VEXP_SESSION_TOKEN: SESSION_TOKEN }
   });
+  fs.closeSync(out);
 
   spawnedServer = true;
 
@@ -106,13 +136,13 @@ async function startBackendServer() {
   const startTime = Date.now();
   while (Date.now() - startTime < 20000) {
     if (await checkServerHealth()) {
-      console.log(`[Electron] Python server ready on ${SERVER_URL}`);
+      console.log(`[Electron] Python server ready on ${serverUrl}`);
       return true;
     }
     await new Promise((r) => setTimeout(r, 350));
   }
 
-  throw new Error(`Server failed to start on ${SERVER_URL} within 20 seconds. Check server.log.`);
+  throw new Error(`Server failed to start on ${serverUrl} within 20 seconds. Check the application server log.`);
 }
 
 /**
@@ -188,7 +218,7 @@ function createMenu() {
               type: 'info',
               title: APP_NAME,
               message: `${APP_NAME} v${branding.app?.version || '2.6.0'}`,
-              detail: `${branding.app?.tagline || 'Autonomous AI Coding Harness'}\nBackend: ${SERVER_URL}\nRunning on Linux Desktop (Electron)`
+              detail: `${branding.app?.tagline || 'AI coding workspace with controlled agent tools'}\nBackend: ${serverUrl}`
             });
           }
         }
@@ -219,7 +249,9 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       webSecurity: true,
+      devTools: !app.isPackaged,
       spellcheck: false
     }
   });
@@ -232,13 +264,53 @@ function createMainWindow() {
   });
 
   // Load the web IDE
-  mainWindow.loadURL(SERVER_URL);
+  mainWindow.loadURL(serverUrl);
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) require('electron').shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`${serverUrl}/`) && url !== serverUrl) event.preventDefault();
+  });
+
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const items = [];
+    if (params.isEditable) {
+      items.push(
+        { role: 'undo', enabled: params.editFlags.canUndo },
+        { role: 'redo', enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', enabled: params.editFlags.canCut },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', enabled: params.editFlags.canSelectAll }
+      );
+    } else if (params.selectionText) {
+      items.push(
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      );
+    }
+    if (params.linkURL) {
+      if (items.length) items.push({ type: 'separator' });
+      items.push(
+        { label: 'Open Link in Browser', click: () => require('electron').shell.openExternal(params.linkURL) },
+        { label: 'Copy Link Address', click: () => require('electron').clipboard.writeText(params.linkURL) }
+      );
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: mainWindow });
+  });
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.warn(`[Electron] Page failed to load: ${errorDescription} (${errorCode})`);
     setTimeout(() => {
       if (!isQuitting && mainWindow) {
-        mainWindow.loadURL(SERVER_URL);
+        mainWindow.loadURL(serverUrl);
       }
     }, 1500);
   });

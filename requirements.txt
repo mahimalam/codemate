@@ -5,3 +5,4 @@ duckduckgo-search>=6.0.0
 python-multipart>=0.0.9
 requests>=2.31.0
 websockets>=12.0.0
+pypdf>=5.0.0

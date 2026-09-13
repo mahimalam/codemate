@@ -1,6 +1,8 @@
 {
+  "config_version": 3,
   "active_provider": "free_pool",
-  "active_model": "auto-failover",
+  "active_model": "fast-auto",
+  "active_tier": "fast",
   "providers": {
     "ollama": {
       "base_url": "http://127.0.0.1:11434",
@@ -29,7 +31,7 @@
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
       "api_key": "",
       "model": "gemini-2.0-flash",
-      "enabled": false,
+      "enabled": true,
       "is_free": true,
       "tier_info": "1.5 Billion tokens/mo, 1M-2M context window"
     },
@@ -37,7 +39,7 @@
       "base_url": "https://api.cerebras.ai/v1",
       "api_key": "",
       "model": "llama-3.3-70b",
-      "enabled": false,
+      "enabled": true,
       "is_free": true,
       "tier_info": "1,000,000 tokens/day free at 2,000+ tok/s"
     },
@@ -45,7 +47,7 @@
       "base_url": "https://api.groq.com/openai/v1",
       "api_key": "",
       "model": "llama-3.3-70b-versatile",
-      "enabled": false,
+      "enabled": true,
       "is_free": true,
       "tier_info": "Ultra-low latency Llama 3.3 70B free tier"
     },
@@ -56,6 +58,22 @@
       "enabled": false,
       "is_free": true,
       "tier_info": "GPT-4o & Llama 3.3 (auto-detected via gh auth token)"
+    },
+    "pollinations": {
+      "base_url": "https://text.pollinations.ai/openai",
+      "api_key": "",
+      "model": "openai-fast",
+      "enabled": true,
+      "is_free": true,
+      "tier_info": "Free public streaming endpoint"
+    },
+    "kilo": {
+      "base_url": "https://api.kilo.ai/api/gateway/v1",
+      "api_key": "",
+      "model": "kilo-auto/free",
+      "enabled": true,
+      "is_free": true,
+      "tier_info": "Free public model gateway"
     },
     "aihorde": {
       "base_url": "https://oai.aihorde.net/v1",
